@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Balance, Expense, Group, PendingInvite } from '../../types';
+import { Balance, Expense, Group, PendingInvite, Settlement } from '../../types';
 import { computePerCurrencyBalances } from '../../lib/computePerCurrencyBalances';
 import { ExpenseFeed } from './ExpenseFeed';
 import { BalancesPanel } from './BalancesPanel';
@@ -27,6 +27,7 @@ interface GroupDetailProps {
   balances: { userId: string; name: string; netCents: number }[];
   activities: ActivityEntry[];
   activitiesTotal: number;
+  settlements: Settlement[];
   pendingInvites: PendingInvite[];
   onRevalidate: () => void;
 }
@@ -38,6 +39,7 @@ export function GroupDetail({
   balances,
   activities,
   activitiesTotal,
+  settlements,
   pendingInvites,
   onRevalidate,
 }: GroupDetailProps) {
@@ -138,7 +140,9 @@ export function GroupDetail({
             initialExpenses={groupExpenses}
             total={expensesTotal}
             showConverted={showConverted}
+            settlements={settlements}
             onExpenseDeleted={onRevalidate}
+            onSettlementChanged={onRevalidate}
           />
           <aside className="space-y-6">
             <BalancesPanel
