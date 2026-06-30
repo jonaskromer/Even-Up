@@ -29,6 +29,7 @@ export default function NewExpenseRoute({ loaderData }: Route.ComponentProps) {
       await api.post<Expense>(`/api/groups/${input.groupId}/expenses`, {
         description: input.description,
         amountCents: input.amountCents,
+        currency: input.currency,
         paidByUserId: input.paidByUserId,
         date: input.date,
         splitMode: input.splitMode,

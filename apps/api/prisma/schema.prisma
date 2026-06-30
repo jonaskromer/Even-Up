@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id              String        @id
-  email           String        @unique
-  name            String
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  memberships     GroupMember[]
-  paidExpenses    Expense[]     @relation("PaidBy")
-  settlementsFrom Settlement[]  @relation("SettlementFrom")
-  settlementsTo   Settlement[]  @relation("SettlementTo")
-  createdInvites      GroupInvite[]
-  activities          Activity[]
+  id                String        @id
+  email             String        @unique
+  name              String
+  preferredCurrency String        @default("EUR")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  memberships       GroupMember[]
+  paidExpenses      Expense[]     @relation("PaidBy")
+  settlementsFrom   Settlement[]  @relation("SettlementFrom")
+  settlementsTo     Settlement[]  @relation("SettlementTo")
+  createdInvites       GroupInvite[]
+  activities           Activity[]
   joinRequestsReceived GroupJoinRequest[] @relation("JoinRequestInvitee")
   joinRequestsSent     GroupJoinRequest[] @relation("JoinRequestInviter")
 }
@@ -26,6 +27,7 @@ model User {
 model Group {
   id          String        @id @default(cuid())
   name        String
+  currency    String        @default("EUR")
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   members     GroupMember[]
@@ -47,18 +49,20 @@ model GroupMember {
 }
 
 model Expense {
-  id           String         @id @default(cuid())
-  groupId      String
-  description  String
-  amountCents  Int
-  paidByUserId String
-  date         DateTime
-  splitMode    String         @default("equal")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  group        Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  paidBy       User           @relation("PaidBy", fields: [paidByUserId], references: [id])
-  splits       ExpenseSplit[]
+  id                  String         @id @default(cuid())
+  groupId             String
+  description         String
+  amountCents         Int
+  originalAmountCents Int            @default(0)
+  originalCurrency    String         @default("EUR")
+  paidByUserId        String
+  date                DateTime
+  splitMode           String         @default("equal")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  group               Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidBy              User           @relation("PaidBy", fields: [paidByUserId], references: [id])
+  splits              ExpenseSplit[]
 }
 
 model ExpenseSplit {
@@ -120,4 +124,14 @@ model GroupJoinRequest {
 
   @@index([invitedUserId, status])
   @@index([groupId, status])
+}
+
+model ExchangeRate {
+  id           String @id @default(cuid())
+  date         String
+  fromCurrency String
+  toCurrency   String
+  rate         Float
+
+  @@unique([date, fromCurrency, toCurrency])
 }

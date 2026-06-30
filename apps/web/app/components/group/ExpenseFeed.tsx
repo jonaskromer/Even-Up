@@ -12,10 +12,17 @@ interface ExpenseFeedProps {
   group: Group;
   initialExpenses: Expense[];
   total: number;
+  showConverted: boolean;
   onExpenseDeleted: () => void;
 }
 
-export function ExpenseFeed({ group, initialExpenses, total, onExpenseDeleted }: ExpenseFeedProps) {
+export function ExpenseFeed({
+  group,
+  initialExpenses,
+  total,
+  showConverted,
+  onExpenseDeleted,
+}: ExpenseFeedProps) {
   const { t } = useLanguage();
   const [extra, setExtra] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,7 +59,13 @@ export function ExpenseFeed({ group, initialExpenses, total, onExpenseDeleted }:
           ) : (
             <>
               {allExpenses.map((e) => (
-                <ExpenseItem key={e.id} expense={e} group={group} onDeleted={onExpenseDeleted} />
+                <ExpenseItem
+                  key={e.id}
+                  expense={e}
+                  group={group}
+                  showConverted={showConverted}
+                  onDeleted={onExpenseDeleted}
+                />
               ))}
               {hasMore && (
                 <div className="p-4 flex justify-center">

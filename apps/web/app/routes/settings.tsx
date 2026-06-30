@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage, type LangPref } from '../context/LanguageContext';
+import { CURRENCIES } from '../lib/utils';
 
 type ThemePref = 'auto' | 'light' | 'dark';
 
@@ -143,6 +144,21 @@ export default function SettingsRoute() {
     setThemePref(pref);
     applyTheme(pref);
   }, []);
+
+  // --- Currency ---
+  const [currencyPref, setCurrencyPref] = useState('EUR');
+  const [currencyStatus, setCurrencyStatus] = useState<Status>('idle');
+
+  async function handleCurrencyChange(currency: string) {
+    setCurrencyPref(currency);
+    setCurrencyStatus('idle');
+    try {
+      await api.patch('/api/auth/me', { preferredCurrency: currency });
+      setCurrencyStatus('ok');
+    } catch {
+      setCurrencyStatus('err');
+    }
+  }
 
   // --- Delete account ---
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -322,6 +338,32 @@ export default function SettingsRoute() {
                   </label>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Currency */}
+        <section className="space-y-4 mb-8">
+          <h2 className="text-lg font-semibold text-foreground">{t('settings.currency.title')}</h2>
+          <Card>
+            <CardContent className="pt-6 space-y-3">
+              <p className="text-sm text-muted-foreground">{t('settings.currency.label')}</p>
+              <select
+                className="form-control"
+                value={currencyPref}
+                onChange={(e) => handleCurrencyChange(e.target.value)}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <StatusMsg
+                status={currencyStatus}
+                okText={t('settings.currency.saveOk')}
+                errText={t('settings.currency.saveError')}
+              />
             </CardContent>
           </Card>
         </section>
