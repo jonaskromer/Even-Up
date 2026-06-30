@@ -3,6 +3,7 @@ updates:
   # npm workspaces — root package-lock.json covers all workspace packages
   - package-ecosystem: npm
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
       day: monday
@@ -41,6 +42,7 @@ updates:
   # GitHub Actions
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
       day: monday
