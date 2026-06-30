@@ -18,7 +18,13 @@ test.describe('dashboard (authenticated)', () => {
   test('renders group list when groups exist', async ({ page }) => {
     await mockAuthedUser(page);
     await mockApi(page, '/api/groups', [
-      { id: 'group-1', name: 'Ski Trip 2026', currency: 'EUR', createdAt: '2026-01-01T00:00:00Z', members: [] },
+      {
+        id: 'group-1',
+        name: 'Ski Trip 2026',
+        currency: 'EUR',
+        createdAt: '2026-01-01T00:00:00Z',
+        members: [],
+      },
     ]);
     await mockApi(page, '/api/groups/group-1/balances', []);
     await mockApi(page, '/api/activities', NO_ACTIVITIES);
