@@ -49,16 +49,12 @@ function wrap(ui: React.ReactElement) {
 
 describe('ExpenseItem', () => {
   it('renders the expense description', () => {
-    wrap(
-      <ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />,
-    );
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     expect(screen.getByText('Dinner')).toBeInTheDocument();
   });
 
   it('shows "you paid" label when current user is the payer', () => {
-    wrap(
-      <ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />,
-    );
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // The translated text for 'expense.item.youPaid' — check something payer-related appears
     const container = screen.getByText('Dinner').closest('.expense-item');
     expect(container).toBeTruthy();
@@ -74,9 +70,7 @@ describe('ExpenseItem', () => {
   });
 
   it('showConverted=true: primary amount displayed in group currency (EUR)', () => {
-    wrap(
-      <ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />,
-    );
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // amountCents=2000 EUR → should show something like "20,00 €"
     const container = screen.getByText('Dinner').closest('.expense-item');
     expect(container!.textContent).toContain('€');
@@ -99,11 +93,12 @@ describe('ExpenseItem', () => {
 
   it('does not show secondary amount when currencies are the same', () => {
     // EUR expense in an EUR group — no secondary line expected
-    wrap(
-      <ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />,
-    );
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // There should be no element with "text-xs text-muted-foreground font-normal" showing a second amount
-    const amountBox = screen.getByText('Dinner').closest('.expense-item')?.querySelector('.expense-amount-box');
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
     // There should be no USD symbol since this is a same-currency EUR expense
     expect(amountBox?.textContent).not.toContain('$');
   });
@@ -115,19 +110,18 @@ describe('ExpenseItem', () => {
       originalAmountCents: 2000,
       originalCurrency: 'USD',
     };
-    wrap(
-      <ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />,
-    );
-    const amountBox = screen.getByText('Dinner').closest('.expense-item')?.querySelector('.expense-amount-box');
+    wrap(<ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
     // When showConverted=true: primary=EUR, secondary=USD
     expect(amountBox?.textContent).toContain('€');
     expect(amountBox?.textContent).toContain('$');
   });
 
   it('renders edit and delete buttons', () => {
-    wrap(
-      <ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />,
-    );
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // Edit link
     const editLink = screen.getByRole('link');
     expect(editLink).toHaveAttribute('href', expect.stringContaining('edit'));

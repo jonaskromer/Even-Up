@@ -130,7 +130,12 @@ describe('computeBalances — three members', () => {
   const bob = { id: 'b', name: 'Bob', email: 'bob@test.com', role: 'member' };
   const clara = { id: 'c', name: 'Clara', email: 'clara@test.com', role: 'member' };
 
-  const group: Group = { id: 'g2', name: 'Ski Trip', currency: 'EUR', members: [alice, bob, clara] };
+  const group: Group = {
+    id: 'g2',
+    name: 'Ski Trip',
+    currency: 'EUR',
+    members: [alice, bob, clara],
+  };
 
   it('payer is credited, others debited, net sums to zero', () => {
     const expense: Expense = {
