@@ -15,6 +15,7 @@ interface ExpenseDefaults {
   amountCents: number;
   originalAmountCents?: number;
   originalCurrency?: string;
+  appliedMarkupRate?: number;
   paidByUserId: string;
   splitMode: SplitMode;
   date: string;
@@ -30,6 +31,7 @@ interface AddExpenseFormProps {
   title?: string;
   subtitle?: string;
   defaults?: ExpenseDefaults;
+  defaultMarkupRate?: number;
 }
 
 function parseEurosToCents(input: string): number {
@@ -155,12 +157,17 @@ export function AddExpenseForm({
   title,
   subtitle,
   defaults,
+  defaultMarkupRate = 0,
 }: AddExpenseFormProps) {
   const { t } = useLanguage();
   const today = new Date().toISOString().slice(0, 10);
 
   const [description, setDescription] = useState(defaults?.description ?? '');
   const [currency, setCurrency] = useState(defaults?.originalCurrency ?? group.currency ?? 'EUR');
+  const [applyMarkup, setApplyMarkup] = useState((defaults?.appliedMarkupRate ?? 0) > 0);
+  const [markupRateInput, setMarkupRateInput] = useState(
+    String(defaults?.appliedMarkupRate ?? defaultMarkupRate),
+  );
   // In edit mode, show the original amount (in original currency), not the converted one
   const displayAmountCents =
     defaults?.originalAmountCents != null ? defaults.originalAmountCents : defaults?.amountCents;
@@ -239,12 +246,16 @@ export function AddExpenseForm({
       exactSplits = result;
     }
 
+    const isForeignCurrency = currency !== group.currency;
+    const markupRate = isForeignCurrency && applyMarkup ? parseFloat(markupRateInput) || 0 : 0;
+
     setSplitError(null);
     onSubmit({
       groupId: group.id,
       description: description.trim(),
       amountCents,
       currency,
+      markupRate: markupRate > 0 ? markupRate : undefined,
       paidByUserId: payerId,
       date,
       splitMode,
@@ -341,6 +352,36 @@ export function AddExpenseForm({
                     <p className="text-xs text-muted-foreground">
                       {t('expense.form.currencyLabel')}: {currency} → {group.currency}
                     </p>
+                  )}
+                  {currency !== group.currency && (
+                    <div className="space-y-2 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={applyMarkup}
+                          onChange={(e) => setApplyMarkup(e.target.checked)}
+                          className="rounded"
+                        />
+                        <span className="text-sm">{t('expense.form.markupToggle')}</span>
+                      </label>
+                      {applyMarkup && (
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="markup-rate-input" className="text-sm shrink-0">
+                            {t('expense.form.markupRateLabel')}
+                          </Label>
+                          <Input
+                            id="markup-rate-input"
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.01}
+                            value={markupRateInput}
+                            onChange={(e) => setMarkupRateInput(e.target.value)}
+                            className="w-24"
+                          />
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 

@@ -21,6 +21,7 @@ export interface Expense {
   amountCents: number;
   originalAmountCents: number;
   originalCurrency: string;
+  appliedMarkupRate: number;
   paidByUserId: string;
   paidByName?: string;
   date: string;
@@ -41,6 +42,7 @@ export interface NewExpenseInput {
   description: string;
   amountCents: number;
   currency?: string;
+  markupRate?: number;
   paidByUserId: string;
   date: string;
   splitMode: SplitMode;

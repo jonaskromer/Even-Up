@@ -13,6 +13,7 @@ function makeExpense(overrides: Partial<Expense>): Expense {
     amountCents: 1000,
     originalAmountCents: 1000,
     originalCurrency: 'EUR',
+    appliedMarkupRate: 0,
     paidByUserId: 'u1',
     paidByName: 'Alice',
     date: '2026-01-01',

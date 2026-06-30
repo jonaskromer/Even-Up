@@ -12,7 +12,7 @@ vi.mock('react-router', () => ({
 }));
 
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1', name: 'Alice' } }),
+  useAuth: () => ({ user: { id: 'u1', name: 'Alice', defaultMarkupRate: 0 } }),
 }));
 
 vi.mock('../../lib/apiClient', () => ({
@@ -36,6 +36,7 @@ const baseExpense: Expense = {
   amountCents: 2000,
   originalAmountCents: 2000,
   originalCurrency: 'EUR',
+  appliedMarkupRate: 0,
   paidByUserId: 'u1',
   paidByName: 'Alice',
   date: '2026-01-01',

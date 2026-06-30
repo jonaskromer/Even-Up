@@ -4,6 +4,7 @@ const FAKE_USER = {
   id: 'e2e-test-user-id',
   email: 'e2e@evenup.local',
   name: 'E2E Test User',
+  defaultMarkupRate: 0,
 };
 
 /**

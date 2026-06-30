@@ -16,6 +16,7 @@ function formatExpense(e: {
   amountCents: number;
   originalAmountCents: number;
   originalCurrency: string;
+  appliedMarkupRate: number;
   paidByUserId: string;
   paidBy: { id: string; name: string };
   date: Date;
@@ -30,6 +31,7 @@ function formatExpense(e: {
     amountCents: e.amountCents,
     originalAmountCents: e.originalAmountCents,
     originalCurrency: e.originalCurrency,
+    appliedMarkupRate: e.appliedMarkupRate,
     paidByUserId: e.paidByUserId,
     paidByName: e.paidBy.name,
     date: e.date.toISOString().slice(0, 10),
@@ -124,6 +126,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         dateStr,
       );
 
+      const markupRate = body.markupRate ?? 0;
+      const markupFactor = 1 + markupRate / 100;
+      const finalAmountCents = Math.round(convertedAmountCents * markupFactor);
+
       const members = await prisma.groupMember.findMany({
         where: { groupId },
         select: { userId: true },
@@ -135,13 +141,18 @@ export async function expensesRoutes(app: FastifyInstance) {
         const rate = await getRate(dateStr, originalCurrency, group.currency);
         convertedExactSplits = body.exactSplits.map((s) => ({
           userId: s.userId,
-          owedCents: Math.round(s.owedCents * rate),
+          owedCents: Math.round(s.owedCents * rate * markupFactor),
+        }));
+      } else if (body.exactSplits && markupRate > 0) {
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * markupFactor),
         }));
       }
 
       const splitData = computeAndValidateSplits(
         body.splitMode,
-        convertedAmountCents,
+        finalAmountCents,
         convertedExactSplits,
         members.map((m) => m.userId),
       );
@@ -150,9 +161,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         data: {
           groupId,
           description: body.description,
-          amountCents: convertedAmountCents,
+          amountCents: finalAmountCents,
           originalAmountCents: body.amountCents,
           originalCurrency,
+          appliedMarkupRate: markupRate,
           paidByUserId: body.paidByUserId,
           date: new Date(body.date),
           splitMode: body.splitMode,
@@ -212,6 +224,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         dateStr,
       );
 
+      const markupRate = body.markupRate ?? 0;
+      const markupFactor = 1 + markupRate / 100;
+      const finalAmountCents = Math.round(convertedAmountCents * markupFactor);
+
       const members = await prisma.groupMember.findMany({
         where: { groupId },
         select: { userId: true },
@@ -222,13 +238,18 @@ export async function expensesRoutes(app: FastifyInstance) {
         const rate = await getRate(dateStr, originalCurrency, group.currency);
         convertedExactSplits = body.exactSplits.map((s) => ({
           userId: s.userId,
-          owedCents: Math.round(s.owedCents * rate),
+          owedCents: Math.round(s.owedCents * rate * markupFactor),
+        }));
+      } else if (body.exactSplits && markupRate > 0) {
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * markupFactor),
         }));
       }
 
       const splitData = computeAndValidateSplits(
         body.splitMode,
-        convertedAmountCents,
+        finalAmountCents,
         convertedExactSplits,
         members.map((m) => m.userId),
       );
@@ -239,9 +260,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         where: { id: expenseId },
         data: {
           description: body.description,
-          amountCents: convertedAmountCents,
+          amountCents: finalAmountCents,
           originalAmountCents: body.amountCents,
           originalCurrency,
+          appliedMarkupRate: markupRate,
           paidByUserId: body.paidByUserId,
           date: new Date(body.date),
           splitMode: body.splitMode,
