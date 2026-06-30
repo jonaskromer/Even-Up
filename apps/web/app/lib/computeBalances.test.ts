@@ -24,7 +24,7 @@ describe('computeBalances', () => {
   const alice = { id: 'a', name: 'Alice', email: 'alice@test.com', role: 'owner' };
   const bob = { id: 'b', name: 'Bob', email: 'bob@test.com', role: 'member' };
 
-  const group: Group = { id: 'g1', name: 'Trip', members: [alice, bob] };
+  const group: Group = { id: 'g1', name: 'Trip', currency: 'EUR', members: [alice, bob] };
 
   it('returns zero balances with no expenses', () => {
     const balances = computeBalances(group, []);
@@ -41,6 +41,8 @@ describe('computeBalances', () => {
       paidByName: 'Alice',
       date: '2026-01-01',
       splitMode: 'equal',
+      originalAmountCents: 2000,
+      originalCurrency: 'EUR',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -61,6 +63,8 @@ describe('computeBalances', () => {
       paidByName: 'Alice',
       date: '2026-01-01',
       splitMode: 'equal',
+      originalAmountCents: 2000,
+      originalCurrency: 'EUR',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
