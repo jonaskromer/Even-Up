@@ -3,22 +3,21 @@ import { useNavigate } from 'react-router';
 import type { Route } from './+types/groups.$groupId_.new-expense';
 import { requireAuth } from '../lib/requireAuth';
 import { useLanguage } from '../context/LanguageContext';
-import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/apiClient';
 import { AddExpenseForm } from '../components/expense/AddExpenseForm';
 import type { Expense, Group, NewExpenseInput } from '../types';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  await requireAuth();
-
-  const group = await api.get<Group>(`/api/groups/${params.groupId}`);
-  return { group };
+  const [user, group] = await Promise.all([
+    requireAuth(),
+    api.get<Group>(`/api/groups/${params.groupId}`),
+  ]);
+  return { group, defaultMarkupRate: user.defaultMarkupRate };
 }
 
 export default function NewExpenseRoute({ loaderData }: Route.ComponentProps) {
-  const { group } = loaderData;
+  const { group, defaultMarkupRate } = loaderData;
   const { t } = useLanguage();
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [submitting, setSubmitting] = useState(false);
@@ -57,7 +56,7 @@ export default function NewExpenseRoute({ loaderData }: Route.ComponentProps) {
       submitError={submitError}
       onCancel={() => navigate(`/groups/${group.id}`)}
       onSubmit={(input) => void handleSubmit(input)}
-      defaultMarkupRate={user?.defaultMarkupRate ?? 0}
+      defaultMarkupRate={defaultMarkupRate}
     />
   );
 }

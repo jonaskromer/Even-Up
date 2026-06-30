@@ -9,13 +9,27 @@ export async function getRate(date: string, from: string, to: string): Promise<n
   });
   if (cached) return cached.rate;
 
-  let rate: number;
-  try {
-    const res = await fetch(`https://api.frankfurter.dev/v2/${date}?base=${from}&symbols=${to}`);
+  async function fetchFromUrl(url: string): Promise<number> {
+    const signal = AbortSignal.timeout(5000);
+    const res = await fetch(url, { signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = (await res.json()) as { rates: Record<string, number> };
-    rate = json.rates[to];
-    if (typeof rate !== 'number') throw new Error('Rate missing in response');
+    const r = json.rates[to];
+    if (typeof r !== 'number') throw new Error('Rate missing in response');
+    return r;
+  }
+
+  let rate: number;
+  try {
+    try {
+      // v2 API for historical dates
+      rate = await fetchFromUrl(
+        `https://api.frankfurter.dev/v2/${date}?base=${from}&symbols=${to}`,
+      );
+    } catch {
+      // v2 doesn't support "latest" — use v1 which does (covers today before ECB publishes)
+      rate = await fetchFromUrl(`https://api.frankfurter.app/latest?base=${from}&symbols=${to}`);
+    }
   } catch {
     throw new HttpError(
       503,

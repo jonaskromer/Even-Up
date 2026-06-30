@@ -3,26 +3,23 @@ import { useNavigate } from 'react-router';
 import type { Route } from './+types/groups.$groupId_.expenses.$expenseId.edit';
 import { requireAuth } from '../lib/requireAuth';
 import { useLanguage } from '../context/LanguageContext';
-import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/apiClient';
 import { AddExpenseForm } from '../components/expense/AddExpenseForm';
 import type { Expense, Group, NewExpenseInput } from '../types';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  await requireAuth();
-
-  const [group, expense] = await Promise.all([
+  const [user, group, expense] = await Promise.all([
+    requireAuth(),
     api.get<Group>(`/api/groups/${params.groupId}`),
     api.get<Expense>(`/api/groups/${params.groupId}/expenses/${params.expenseId}`),
   ]);
 
-  return { group, expense };
+  return { group, expense, defaultMarkupRate: user.defaultMarkupRate };
 }
 
 export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
-  const { group, expense } = loaderData;
+  const { group, expense, defaultMarkupRate } = loaderData;
   const { t } = useLanguage();
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [submitting, setSubmitting] = useState(false);
@@ -80,7 +77,7 @@ export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
         date: expense.date,
         splits: expense.splits,
       }}
-      defaultMarkupRate={user?.defaultMarkupRate ?? 0}
+      defaultMarkupRate={defaultMarkupRate}
     />
   );
 }

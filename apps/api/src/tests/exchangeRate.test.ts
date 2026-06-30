@@ -43,7 +43,7 @@ describe('getRate', () => {
     expect(mockPrisma.exchangeRate.findUnique).toHaveBeenCalledOnce();
   });
 
-  it('fetches from Frankfurter and caches when DB miss', async () => {
+  it('fetches from Frankfurter v2 and caches when DB miss', async () => {
     mockPrisma.exchangeRate.findUnique.mockResolvedValueOnce(null);
     mockPrisma.exchangeRate.upsert.mockResolvedValueOnce({ rate: 0.926 });
 
@@ -56,17 +56,38 @@ describe('getRate', () => {
     expect(rate).toBe(0.926);
     expect(fetchSpy).toHaveBeenCalledWith(
       'https://api.frankfurter.dev/v2/2026-03-20?base=USD&symbols=EUR',
+      expect.objectContaining({ signal: expect.anything() }),
     );
     expect(mockPrisma.exchangeRate.upsert).toHaveBeenCalledOnce();
   });
 
-  it('throws 503 when Frankfurter returns non-ok', async () => {
+  it('falls back to v1 latest when v2 date fetch fails', async () => {
     mockPrisma.exchangeRate.findUnique.mockResolvedValueOnce(null);
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-    } as Response);
+    mockPrisma.exchangeRate.upsert.mockResolvedValueOnce({ rate: 0.87765 });
 
-    await expect(getRate('2026-03-20', 'USD', 'EUR')).rejects.toMatchObject({ status: 503 });
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ rates: { EUR: 0.87765 } }),
+      } as Response);
+
+    const rate = await getRate('2026-06-30', 'USD', 'EUR');
+    expect(rate).toBe(0.87765);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'https://api.frankfurter.app/latest?base=USD&symbols=EUR',
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+  });
+
+  it('throws 503 when both v2 and v1 fallback fail', async () => {
+    mockPrisma.exchangeRate.findUnique.mockResolvedValueOnce(null);
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+
+    await expect(getRate('2026-06-30', 'USD', 'EUR')).rejects.toMatchObject({ status: 503 });
   });
 });

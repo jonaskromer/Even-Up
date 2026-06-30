@@ -15,7 +15,12 @@ import { joinRequestsRoutes } from './routes/joinRequests.js';
 
 function getAllowedOrigins(): string[] {
   if (env.CORS_ORIGIN) return env.CORS_ORIGIN.split(',').map((o) => o.trim());
-  return ['http://localhost:5173', 'http://localhost:4173'];
+  return [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:4173',
+    'http://localhost:4174',
+  ];
 }
 
 export function buildApp() {
@@ -30,6 +35,7 @@ export function buildApp() {
       if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
       cb(null, false);
     },
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
   app.register(cookie);

@@ -48,7 +48,7 @@ function StatusMsg({
 }
 
 export default function SettingsRoute() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const { t, lang, langPref, setLangPref } = useLanguage();
   const navigate = useNavigate();
 
@@ -154,6 +154,7 @@ export default function SettingsRoute() {
     setCurrencyStatus('idle');
     try {
       await api.patch('/api/auth/me', { preferredCurrency: currency });
+      await refreshUser();
       setCurrencyStatus('ok');
     } catch {
       setCurrencyStatus('err');
@@ -169,6 +170,7 @@ export default function SettingsRoute() {
     setMarkupStatus('idle');
     try {
       await api.patch('/api/auth/me', { defaultMarkupRate: rate });
+      await refreshUser();
       setMarkupStatus('ok');
     } catch {
       setMarkupStatus('err');
