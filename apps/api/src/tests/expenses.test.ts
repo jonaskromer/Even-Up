@@ -120,6 +120,31 @@ describe('POST /api/groups/:groupId/expenses', () => {
     expect(splits[0].userId).toBe(owner.id);
     expect(splits[0].owedCents).toBe(3000);
   });
+
+  it('applies markupRate to amountCents and stores appliedMarkupRate', async () => {
+    const owner = await prisma.user.findUniqueOrThrow({
+      where: { email: 'test-exp-owner@evenup.local' },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/expenses`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        description: 'Markup test',
+        amountCents: 5000,
+        paidByUserId: owner.id,
+        date: '2026-01-01',
+        markupRate: 2.5,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    // 5000 × 1.025 = 5125
+    expect(res.json().amountCents).toBe(5125);
+    expect(res.json().originalAmountCents).toBe(5000);
+    expect(res.json().appliedMarkupRate).toBe(2.5);
+  });
 });
 
 describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {

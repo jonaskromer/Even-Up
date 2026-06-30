@@ -12,7 +12,7 @@ vi.mock('react-router', () => ({
 }));
 
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1', name: 'Alice' } }),
+  useAuth: () => ({ user: { id: 'u1', name: 'Alice', defaultMarkupRate: 0 } }),
 }));
 
 vi.mock('../../lib/apiClient', () => ({
@@ -36,6 +36,7 @@ const baseExpense: Expense = {
   amountCents: 2000,
   originalAmountCents: 2000,
   originalCurrency: 'EUR',
+  appliedMarkupRate: 0,
   paidByUserId: 'u1',
   paidByName: 'Alice',
   date: '2026-01-01',
@@ -118,6 +119,25 @@ describe('ExpenseItem', () => {
     // When showConverted=true: primary=EUR, secondary=USD
     expect(amountBox?.textContent).toContain('€');
     expect(amountBox?.textContent).toContain('$');
+  });
+
+  it('shows markup hint when appliedMarkupRate > 0', () => {
+    const expense: Expense = { ...baseExpense, appliedMarkupRate: 2 };
+    wrap(<ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).toMatch(/incl\. 2%/);
+  });
+
+  it('does not show markup hint when appliedMarkupRate is 0', () => {
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).not.toMatch(/incl\./);
   });
 
   it('renders edit and delete buttons', () => {

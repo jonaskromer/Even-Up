@@ -9,7 +9,7 @@ import { env } from '../env.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: { id: string; email: string; name: string };
+    user?: { id: string; email: string; name: string; defaultMarkupRate: number };
   }
 }
 
@@ -67,7 +67,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
       where: { id: verified.sub },
       create: { id: verified.sub, email: verified.email, name },
       update: { email: verified.email, name },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, defaultMarkupRate: true },
     });
   } catch (e: unknown) {
     // P2002 = unique constraint on email: a row with this email already exists under a
@@ -82,7 +82,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
     if (!isEmailConflict) throw e;
     const existing = await prisma.user.findUnique({
       where: { email: verified.email },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, defaultMarkupRate: true },
     });
     if (!existing) throw new HttpError(409, 'E-Mail bereits vergeben');
     user = existing;

@@ -43,6 +43,7 @@ describe('computeBalances', () => {
       splitMode: 'equal',
       originalAmountCents: 2000,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -65,6 +66,7 @@ describe('computeBalances', () => {
       splitMode: 'equal',
       originalAmountCents: 2000,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -83,6 +85,7 @@ describe('computeBalances', () => {
       splitMode: 'equal',
       originalAmountCents: 3000,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-01-02T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -103,6 +106,7 @@ describe('computeBalances', () => {
         splitMode: 'equal',
         originalAmountCents: 2000,
         originalCurrency: 'EUR',
+        appliedMarkupRate: 0,
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       {
@@ -116,6 +120,7 @@ describe('computeBalances', () => {
         splitMode: 'equal',
         originalAmountCents: 1400,
         originalCurrency: 'EUR',
+        appliedMarkupRate: 0,
         updatedAt: '2026-01-02T00:00:00.000Z',
       },
     ];
@@ -149,6 +154,7 @@ describe('computeBalances — three members', () => {
       splitMode: 'equal',
       originalAmountCents: 9000,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-02-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -174,6 +180,7 @@ describe('computeBalances — three members', () => {
       splitMode: 'equal',
       originalAmountCents: 100,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-02-02T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);
@@ -201,6 +208,7 @@ describe('computeBalances — single member', () => {
       splitMode: 'equal',
       originalAmountCents: 5000,
       originalCurrency: 'EUR',
+      appliedMarkupRate: 0,
       updatedAt: '2026-03-01T00:00:00.000Z',
     };
     const balances = computeBalances(group, [expense]);

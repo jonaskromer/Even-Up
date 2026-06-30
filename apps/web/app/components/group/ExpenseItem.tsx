@@ -77,6 +77,11 @@ export function ExpenseItem({ expense, group, showConverted, onDeleted }: Expens
             {formatCurrency(secondaryCents, secondaryCurrency)}
           </span>
         )}
+        {expense.appliedMarkupRate > 0 && (
+          <span className="text-xs text-muted-foreground font-normal">
+            {t('expense.form.markupHint', { rate: expense.appliedMarkupRate })}
+          </span>
+        )}
         <span className="amount-share">{shareLabel}</span>
       </div>
       <div className="flex items-center opacity-40 hover:opacity-100 transition-opacity ml-2 shrink-0">
