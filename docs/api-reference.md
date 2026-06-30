@@ -189,9 +189,11 @@ Return the current user profile. On the first authenticated request for a given 
 
 ```json
 {
-  "user": { "id": "9f2b...", "email": "max@example.com", "name": "Max Mustermann" }
+  "user": { "id": "9f2b...", "email": "max@example.com", "name": "Max Mustermann", "defaultMarkupRate": 1.5 }
 }
 ```
+
+`defaultMarkupRate` is the user's saved credit card FX markup percentage (0 = no markup). Pre-filled in the expense form when creating or editing a foreign-currency expense.
 
 **Errors:** `401` no valid session cookie
 
@@ -206,15 +208,17 @@ Update display name, language preference, and/or preferred currency. Also syncs 
 **Request body** (at least one field required):
 
 ```json
-{ "name": "Max M.", "lang": "en", "preferredCurrency": "USD" }
+{ "name": "Max M.", "lang": "en", "preferredCurrency": "USD", "defaultMarkupRate": 1.5 }
 ```
 
 `preferredCurrency` must be a 3-letter ISO 4217 code (e.g. `"EUR"`, `"USD"`, `"JPY"`). It is stored on the local `User` row and used as the default currency when the user creates a new group.
 
+`defaultMarkupRate` is a number between 0 and 100 (percentage). Stored on the `User` row and pre-filled in the expense form when creating or editing a foreign-currency expense.
+
 **Response `200`:**
 
 ```json
-{ "user": { "id": "9f2b...", "email": "max@example.com", "name": "Max M." } }
+{ "user": { "id": "9f2b...", "email": "max@example.com", "name": "Max M.", "defaultMarkupRate": 1.5 } }
 ```
 
 ---
@@ -428,9 +432,10 @@ stable pagination). Supports offset-based pagination.
       "id": "clx...",
       "groupId": "clx...",
       "description": "Abendessen",
-      "amountCents": 4500,
+      "amountCents": 4568,
       "originalAmountCents": 4800,
       "originalCurrency": "USD",
+      "appliedMarkupRate": 1.5,
       "paidByUserId": "clx...",
       "paidByName": "Demo User",
       "date": "2026-01-15",
@@ -465,7 +470,9 @@ Fetch a single expense by ID. Used by the edit route to load the current expense
 
 Create an expense. Splits are auto-calculated based on `splitMode` and current member count.
 
-If `currency` differs from the group's base currency, the API fetches the historical exchange rate for the expense date from [Frankfurter](https://api.frankfurter.dev) (ECB data), caches it permanently in the `ExchangeRate` table, and stores both the original and the converted amount.
+If `currency` differs from the group's base currency, the API fetches the historical exchange rate for the expense date from [Frankfurter v2](https://api.frankfurter.dev) (ECB data) with automatic fallback to [Frankfurter v1](https://api.frankfurter.app/latest) for today's rate when v2 cannot serve it. Rates are cached permanently in the `ExchangeRate` table. Both original and converted amounts are stored.
+
+If `markupRate` is provided (and `currency` differs from the group currency), the converted amount is multiplied by `1 + markupRate/100` before being stored. The markup is applied after conversion so all splits sum to the markup-inclusive total.
 
 **Request body:**
 
@@ -474,6 +481,7 @@ If `currency` differs from the group's base currency, the API fetches the histor
   "description": "Abendessen",
   "amountCents": 4800,
   "currency": "USD",
+  "markupRate": 1.5,
   "paidByUserId": "clx...",
   "date": "2026-01-15",
   "splitMode": "equal"
@@ -481,22 +489,23 @@ If `currency` differs from the group's base currency, the API fetches the histor
 ```
 
 `currency` is optional; defaults to the group's base currency if omitted.
+`markupRate` is optional (0–100); defaults to 0 (no markup) if omitted.
 
 **`splitMode` options:** `equal`, `exact`, `percent`, `shares`
 
-**Response `201`:** Expense object (same shape as GET item)
+**Response `201`:** Expense object (same shape as GET item, includes `appliedMarkupRate`)
 
-**Errors:** `503` exchange rate unavailable (Frankfurter unreachable and no cached rate)
+**Errors:** `503` exchange rate unavailable (both Frankfurter v2 and v1 unreachable, no cached rate)
 
 ### PUT `/api/groups/:groupId/expenses/:expenseId`
 
-Update an existing expense. Deletes old splits and recalculates. Same currency-conversion logic as POST.
+Update an existing expense. Deletes old splits and recalculates. Same currency-conversion and markup logic as POST.
 
-**Request body:** Same as POST (with additional required `updatedAt` ISO string for optimistic-concurrency check)
+**Request body:** Same as POST plus `updatedAt` ISO string (required for optimistic-concurrency check)
 
-**Response `200`:** Updated expense object
+**Response `200`:** Updated expense object (includes `appliedMarkupRate`)
 
-**Errors:** `409` concurrent edit (updatedAt mismatch), `503` exchange rate unavailable
+**Errors:** `409` concurrent edit (updatedAt mismatch), `503` exchange rate unavailable (both APIs unreachable)
 
 ### DELETE `/api/groups/:groupId/expenses/:expenseId`
 

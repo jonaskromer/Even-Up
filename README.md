@@ -20,7 +20,8 @@ A web application for splitting expenses fairly among groups. Create groups for 
 ### Expense Tracking
 
 - Log expenses with title, amount, date, and payer
-- **Multi-currency** — choose any of 31 currencies (ECB/Frankfurter API) per expense; the API converts to the group's base currency using the historical exchange rate for the expense date; rates are cached permanently in the DB; original amount and currency are always stored for display
+- **Multi-currency** — choose any of 31 currencies (ECB/Frankfurter API) per expense; the API converts to the group's base currency using the historical exchange rate for the expense date (automatic v1 fallback when v2 cannot serve today's rate); rates are cached permanently in the DB; original amount and currency are always stored for display
+- **Credit card FX markup** — optional percentage markup applied on top of the exchange rate conversion, reflecting real-world credit card foreign-transaction fees; configurable per user in Settings and pre-filled when creating or editing an expense
 - Group currency toggle: view balances either converted to the group's base currency or broken down per original currency
 - Preferred currency is saved per user account and used when creating a new group
 - Select how the cost is split:
@@ -124,10 +125,10 @@ All monetary values are stored as **integer cents** to avoid floating-point roun
 
 | Entity               | Key Fields                                                                   |
 | -------------------- | ---------------------------------------------------------------------------- |
-| **User**             | id (Supabase Auth user id), name, email, preferredCurrency, createdAt        |
+| **User**             | id (Supabase Auth user id), name, email, preferredCurrency, defaultMarkupRate, createdAt |
 | **Group**            | id, name, currency (base currency), createdAt, updatedAt                     |
 | **GroupMember**      | groupId, userId, role                                                        |
-| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, splitMode, date |
+| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, appliedMarkupRate, splitMode, date |
 | **ExpenseSplit**     | expenseId, userId, owedCents                                                 |
 | **Settlement**       | id, groupId, fromUserId, toUserId, amountCents, date, note?                  |
 | **GroupInvite**      | id, token (unique), groupId, createdBy, expiresAt                            |
@@ -151,8 +152,8 @@ resulting JWT (`requireAuth`) and exposes:
 
 | Method | Path             | Description                                 |
 | ------ | ---------------- | ------------------------------------------- |
-| GET    | `/api/auth/me`   | Current user profile (this DB's view of it) |
-| PATCH  | `/api/auth/me`   | Update name, language, or preferred currency |
+| GET    | `/api/auth/me`   | Current user profile (includes `defaultMarkupRate`) |
+| PATCH  | `/api/auth/me`   | Update name, language, preferred currency, or `defaultMarkupRate` |
 
 ### Groups
 
@@ -169,9 +170,9 @@ resulting JWT (`requireAuth`) and exposes:
 | Method | Path                            | Description                |
 | ------ | ------------------------------- | -------------------------- |
 | GET    | `/api/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
-| POST   | `/api/groups/:id/expenses`      | Create expense with splits (optional `currency` field triggers conversion) |
+| POST   | `/api/groups/:id/expenses`      | Create expense with splits (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
 | GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) |
-| PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` field triggers conversion) |
+| PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
 | DELETE | `/api/groups/:id/expenses/:eid` | Delete expense             |
 
 ### Settlements
@@ -354,8 +355,8 @@ npm run dev                     # Vite on http://localhost:5173
 npm test
 
 # Or individually
-cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (65 tests)
-cd apps/web && npm test         # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (41 tests)
+cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (67 tests)
+cd apps/web && npm test         # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (43 tests)
 ```
 
 ---
@@ -626,7 +627,7 @@ self-hosted Postgres + Prisma database for all application data. See
 - Deleting a user in Supabase Auth does not cascade to the local `User` row or its relations — an accepted gap, not handled via a Database Webhook (see [ADR 004](docs/adr/004-supabase-auth.md))
 - No mobile app — responsive web only
 - Duplicate-join-request prevention is enforced at the application level (a check-then-create), not via a database constraint — a small race window exists where two concurrent invites to the same person could both succeed
-- CORS allows all origins (`@fastify/cors` registered with no options) — not yet restricted to the frontend's own domain
+- CORS is restricted to `CORS_ORIGIN` env var (defaults to `localhost:5173/4173/5174/4174` for local dev); allowed methods include `PATCH` explicitly
 
 ---
 

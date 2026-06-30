@@ -20,21 +20,29 @@ Requirements:
 
 ## Decision
 
-### Rate source: Frankfurter API (ECB data)
+### Rate source: Frankfurter API (ECB data) with dual-version fallback
 
-Use the free, open, no-auth-required **Frankfurter** API (`api.frankfurter.dev`) which
-serves historical and current rates from the **European Central Bank**. The request
-shape is:
+Use the free, open, no-auth-required **Frankfurter** API which serves historical and
+current rates from the **European Central Bank**. Two API versions are tried in order:
 
 ```
-GET https://api.frankfurter.dev/v2/{date}?base={from}&symbols={to}
+1. GET https://api.frankfurter.dev/v2/{date}?base={from}&symbols={to}   (v2, historical)
+2. GET https://api.frankfurter.app/latest?base={from}&symbols={to}      (v1, fallback)
 ```
+
+Each fetch carries a `AbortSignal.timeout(5000)` to prevent indefinite hangs. The
+fallback to v1 is needed because Frankfurter v2 does not support a `/latest` endpoint —
+requesting today's date before the ECB publishes rates (typically ~16:00 CET), or
+requesting a weekend/holiday date, causes v2 to return a 404. v1's `/latest` always
+returns the most recent business-day rate and handles these cases. The `503` error is
+only raised when both fetches fail.
 
 Rationale:
 - No API key or account needed
 - Deterministic historical rates — the rate for a past date never changes, which means
   cached rates are always valid
 - ECB is a credible, authoritative source
+- Dual-version fallback makes expense creation succeed reliably for today's date
 
 ### Permanent DB cache in `ExchangeRate` table
 
