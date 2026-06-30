@@ -8,14 +8,11 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
-import { cn, CURRENCIES } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 
 interface ExpenseDefaults {
   description: string;
   amountCents: number;
-  originalAmountCents?: number;
-  originalCurrency?: string;
-  appliedMarkupRate?: number;
   paidByUserId: string;
   splitMode: SplitMode;
   date: string;
@@ -31,7 +28,6 @@ interface AddExpenseFormProps {
   title?: string;
   subtitle?: string;
   defaults?: ExpenseDefaults;
-  defaultMarkupRate?: number;
 }
 
 function parseEurosToCents(input: string): number {
@@ -157,22 +153,13 @@ export function AddExpenseForm({
   title,
   subtitle,
   defaults,
-  defaultMarkupRate = 0,
 }: AddExpenseFormProps) {
   const { t } = useLanguage();
   const today = new Date().toISOString().slice(0, 10);
 
   const [description, setDescription] = useState(defaults?.description ?? '');
-  const [currency, setCurrency] = useState(defaults?.originalCurrency ?? group.currency ?? 'EUR');
-  const [applyMarkup, setApplyMarkup] = useState((defaults?.appliedMarkupRate ?? 0) > 0);
-  const [markupRateInput, setMarkupRateInput] = useState(
-    String(defaults?.appliedMarkupRate ?? defaultMarkupRate),
-  );
-  // In edit mode, show the original amount (in original currency), not the converted one
-  const displayAmountCents =
-    defaults?.originalAmountCents != null ? defaults.originalAmountCents : defaults?.amountCents;
   const [amountInput, setAmountInput] = useState(
-    displayAmountCents != null ? (displayAmountCents / 100).toFixed(2) : '',
+    defaults ? (defaults.amountCents / 100).toFixed(2) : '',
   );
   const [payerId, setPayerId] = useState<string>(
     defaults?.paidByUserId ?? group.members[0]?.id ?? '',
@@ -246,16 +233,11 @@ export function AddExpenseForm({
       exactSplits = result;
     }
 
-    const isForeignCurrency = currency !== group.currency;
-    const markupRate = isForeignCurrency && applyMarkup ? parseFloat(markupRateInput) || 0 : 0;
-
     setSplitError(null);
     onSubmit({
       groupId: group.id,
       description: description.trim(),
       amountCents,
-      currency,
-      markupRate: markupRate > 0 ? markupRate : undefined,
       paidByUserId: payerId,
       date,
       splitMode,
@@ -322,24 +304,13 @@ export function AddExpenseForm({
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-amount">{t('expense.form.amountLabel')}</Label>
-                  <div className="flex gap-2 items-center">
-                    <select
-                      aria-label={t('expense.form.currencyLabel')}
-                      className="shrink-0 w-20 rounded-md border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                    >
-                      {CURRENCIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="input-prefix-wrapper">
+                    <span className="input-prefix">€</span>
                     <Input
                       type="number"
                       id="expense-amount"
                       name="amount"
-                      className="flex-1 min-w-0"
+                      className="pl-8"
                       placeholder="0.00"
                       step="0.01"
                       min="0"
@@ -348,41 +319,6 @@ export function AddExpenseForm({
                       onChange={(e) => setAmountInput(e.target.value)}
                     />
                   </div>
-                  {currency !== group.currency && (
-                    <p className="text-xs text-muted-foreground">
-                      {t('expense.form.currencyLabel')}: {currency} → {group.currency}
-                    </p>
-                  )}
-                  {currency !== group.currency && (
-                    <div className="space-y-2 pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={applyMarkup}
-                          onChange={(e) => setApplyMarkup(e.target.checked)}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{t('expense.form.markupToggle')}</span>
-                      </label>
-                      {applyMarkup && (
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="markup-rate-input" className="text-sm shrink-0">
-                            {t('expense.form.markupRateLabel')}
-                          </Label>
-                          <Input
-                            id="markup-rate-input"
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.01}
-                            value={markupRateInput}
-                            onChange={(e) => setMarkupRateInput(e.target.value)}
-                            className="w-24"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 <div className="space-y-2">

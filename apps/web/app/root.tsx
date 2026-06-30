@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router';
 import { AuthProvider } from './context/AuthContext';
 import { PendingInvitesProvider } from './context/PendingInvitesContext';
@@ -49,13 +48,6 @@ export function HydrateFallback() {
 }
 
 export default function App() {
-  useEffect(() => {
-    const s = localStorage.getItem('evenup:theme');
-    const dark =
-      s === 'dark' || (s !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', dark);
-  }, []);
-
   return (
     <LanguageProvider>
       <AuthProvider>

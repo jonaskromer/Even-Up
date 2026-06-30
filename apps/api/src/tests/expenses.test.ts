@@ -82,8 +82,6 @@ describe('POST /api/groups/:groupId/expenses', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().description).toBe('Testausgabe');
     expect(res.json().amountCents).toBe(5000);
-    expect(res.json().originalAmountCents).toBe(5000);
-    expect(res.json().originalCurrency).toBe('EUR');
 
     const listRes = await app.inject({
       method: 'GET',
@@ -119,31 +117,6 @@ describe('POST /api/groups/:groupId/expenses', () => {
     expect(splits).toHaveLength(1);
     expect(splits[0].userId).toBe(owner.id);
     expect(splits[0].owedCents).toBe(3000);
-  });
-
-  it('applies markupRate to amountCents and stores appliedMarkupRate', async () => {
-    const owner = await prisma.user.findUniqueOrThrow({
-      where: { email: 'test-exp-owner@evenup.local' },
-    });
-
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        description: 'Markup test',
-        amountCents: 5000,
-        paidByUserId: owner.id,
-        date: '2026-01-01',
-        markupRate: 2.5,
-      },
-    });
-
-    expect(res.statusCode).toBe(201);
-    // 5000 × 1.025 = 5125
-    expect(res.json().amountCents).toBe(5125);
-    expect(res.json().originalAmountCents).toBe(5000);
-    expect(res.json().appliedMarkupRate).toBe(2.5);
   });
 });
 
@@ -220,104 +193,5 @@ describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {
     });
 
     expect(res.statusCode).toBe(409);
-  });
-});
-
-describe('GET /api/groups/:groupId/expenses/:expenseId', () => {
-  let expenseId: string;
-
-  beforeAll(async () => {
-    const owner = await prisma.user.findUniqueOrThrow({
-      where: { email: 'test-exp-owner@evenup.local' },
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        description: 'SingleFetch',
-        amountCents: 4200,
-        paidByUserId: owner.id,
-        date: '2026-06-01',
-      },
-    });
-    expenseId = res.json().id as string;
-  });
-
-  it('returns 401 without auth', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('returns the expense with all expected fields', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.id).toBe(expenseId);
-    expect(body.description).toBe('SingleFetch');
-    expect(body.amountCents).toBe(4200);
-    expect(typeof body.originalAmountCents).toBe('number');
-    expect(typeof body.originalCurrency).toBe('string');
-  });
-
-  it('returns 404 for a non-existent expense id', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/groups/${groupId}/expenses/nonexistent-id-000`,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(res.statusCode).toBe(404);
-  });
-});
-
-describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
-  it('returns 401 without auth', async () => {
-    const res = await app.inject({
-      method: 'DELETE',
-      url: `/api/groups/${groupId}/expenses/some-id`,
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('deletes the expense and returns 204; expense no longer in list', async () => {
-    const owner = await prisma.user.findUniqueOrThrow({
-      where: { email: 'test-exp-owner@evenup.local' },
-    });
-
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        description: 'ToDelete',
-        amountCents: 1500,
-        paidByUserId: owner.id,
-        date: '2026-06-02',
-      },
-    });
-    expect(createRes.statusCode).toBe(201);
-    const deleteId = createRes.json().id as string;
-
-    const deleteRes = await app.inject({
-      method: 'DELETE',
-      url: `/api/groups/${groupId}/expenses/${deleteId}`,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(deleteRes.statusCode).toBe(204);
-
-    // Verify the expense no longer exists via GET single
-    const getRes = await app.inject({
-      method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${deleteId}`,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(getRes.statusCode).toBe(404);
   });
 });

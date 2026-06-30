@@ -199,17 +199,15 @@ Return the current user profile. On the first authenticated request for a given 
 
 ### PATCH `/api/auth/me`
 
-Update display name, language preference, and/or preferred currency. Also syncs name and lang to Supabase `user_metadata` so email templates can use them.
+Update display name and/or language preference. Also syncs the values to Supabase `user_metadata` so email templates can use them.
 
 **Rate limit:** 20 req/min
 
 **Request body** (at least one field required):
 
 ```json
-{ "name": "Max M.", "lang": "en", "preferredCurrency": "USD" }
+{ "name": "Max M.", "lang": "en" }
 ```
-
-`preferredCurrency` must be a 3-letter ISO 4217 code (e.g. `"EUR"`, `"USD"`, `"JPY"`). It is stored on the local `User` row and used as the default currency when the user creates a new group.
 
 **Response `200`:**
 
@@ -268,7 +266,6 @@ List all groups the authenticated user is a member of.
   {
     "id": "clx...",
     "name": "Ski Trip 2026",
-    "currency": "EUR",
     "members": [
       { "id": "clx...", "name": "Demo User", "email": "demo@evenup.local", "role": "owner" },
       { "id": "clx...", "name": "Anna", "email": "anna@evenup.local", "role": "member" }
@@ -279,7 +276,7 @@ List all groups the authenticated user is a member of.
 
 ### POST `/api/groups`
 
-Create a new group. The authenticated user becomes the owner. The group's base `currency` is set from the creator's `preferredCurrency` (defaults to `"EUR"` if none is set).
+Create a new group. The authenticated user becomes the owner.
 
 **Request body:**
 
@@ -293,7 +290,7 @@ Create a new group. The authenticated user becomes the owner. The group's base `
 
 Get a single group with its members. Requires group membership.
 
-**Response `200`:** Group object (includes `currency` field)
+**Response `200`:** Group object
 
 **Errors:** `403` not a member, `404` group not found
 
@@ -429,8 +426,6 @@ stable pagination). Supports offset-based pagination.
       "groupId": "clx...",
       "description": "Abendessen",
       "amountCents": 4500,
-      "originalAmountCents": 4800,
-      "originalCurrency": "USD",
       "paidByUserId": "clx...",
       "paidByName": "Demo User",
       "date": "2026-01-15",
@@ -447,56 +442,36 @@ stable pagination). Supports offset-based pagination.
 }
 ```
 
-`amountCents` is always in the **group's base currency** (used for balance calculation).
-`originalAmountCents` and `originalCurrency` are the values the user entered (equal to `amountCents`/group currency when no conversion was needed).
-
 `total` is the count of all expenses in the group (regardless of `limit`/`offset`), used by
 the frontend to show the "X of Y" counter and determine whether to show a "Load more" button.
-
-### GET `/api/groups/:groupId/expenses/:expenseId`
-
-Fetch a single expense by ID. Used by the edit route to load the current expense data.
-
-**Response `200`:** Expense object (same shape as a single item in the list above)
-
-**Errors:** `403` not a member, `404` not found
 
 ### POST `/api/groups/:groupId/expenses`
 
 Create an expense. Splits are auto-calculated based on `splitMode` and current member count.
-
-If `currency` differs from the group's base currency, the API fetches the historical exchange rate for the expense date from [Frankfurter](https://api.frankfurter.dev) (ECB data), caches it permanently in the `ExchangeRate` table, and stores both the original and the converted amount.
 
 **Request body:**
 
 ```json
 {
   "description": "Abendessen",
-  "amountCents": 4800,
-  "currency": "USD",
+  "amountCents": 4500,
   "paidByUserId": "clx...",
   "date": "2026-01-15",
   "splitMode": "equal"
 }
 ```
 
-`currency` is optional; defaults to the group's base currency if omitted.
-
 **`splitMode` options:** `equal`, `exact`, `percent`, `shares`
 
 **Response `201`:** Expense object (same shape as GET item)
 
-**Errors:** `503` exchange rate unavailable (Frankfurter unreachable and no cached rate)
-
 ### PUT `/api/groups/:groupId/expenses/:expenseId`
 
-Update an existing expense. Deletes old splits and recalculates. Same currency-conversion logic as POST.
+Update an existing expense. Deletes old splits and recalculates.
 
-**Request body:** Same as POST (with additional required `updatedAt` ISO string for optimistic-concurrency check)
+**Request body:** Same as POST
 
 **Response `200`:** Updated expense object
-
-**Errors:** `409` concurrent edit (updatedAt mismatch), `503` exchange rate unavailable
 
 ### DELETE `/api/groups/:groupId/expenses/:expenseId`
 
@@ -657,6 +632,5 @@ Validation errors (Zod) include field-level details:
 | `401`  | Missing or invalid JWT                                                           |
 | `403`  | Not a member of the group                                                        |
 | `404`  | Resource not found                                                               |
-| `409`  | Duplicate (email already exists, already a member, join request already pending) or concurrent edit conflict |
+| `409`  | Duplicate (email already exists, already a member, join request already pending) |
 | `500`  | Internal server error                                                            |
-| `503`  | Exchange rate unavailable (Frankfurter API unreachable, no cached rate in DB)    |

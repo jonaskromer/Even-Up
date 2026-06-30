@@ -11,13 +11,11 @@ import { isEmailConfigured, sendJoinRequestEmail } from '../services/emailServic
 function formatGroup(g: {
   id: string;
   name: string;
-  currency: string;
   members: { role: string; user: { id: string; name: string; email: string } }[];
 }) {
   return {
     id: g.id,
     name: g.name,
-    currency: g.currency,
     members: g.members.map((m) => ({
       id: m.user.id,
       name: m.user.name,
@@ -45,15 +43,9 @@ export async function groupsRoutes(app: FastifyInstance) {
   app.post('/', async (req, reply) => {
     const body = createGroupSchema.parse(req.body);
 
-    const creator = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      select: { preferredCurrency: true },
-    });
-
     const group = await prisma.group.create({
       data: {
         name: body.name,
-        currency: creator?.preferredCurrency ?? 'EUR',
         members: { create: { userId: req.user!.id, role: 'owner' } },
       },
       include: {

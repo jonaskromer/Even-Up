@@ -10,7 +10,6 @@ export interface Member {
 export interface Group {
   id: string;
   name: string;
-  currency: string;
   members: Member[];
 }
 
@@ -19,9 +18,6 @@ export interface Expense {
   groupId: string;
   description: string;
   amountCents: number;
-  originalAmountCents: number;
-  originalCurrency: string;
-  appliedMarkupRate: number;
   paidByUserId: string;
   paidByName?: string;
   date: string;
@@ -41,25 +37,10 @@ export interface NewExpenseInput {
   groupId: string;
   description: string;
   amountCents: number;
-  currency?: string;
-  markupRate?: number;
   paidByUserId: string;
   date: string;
   splitMode: SplitMode;
   exactSplits?: { userId: string; owedCents: number }[];
-}
-
-export interface Settlement {
-  id: string;
-  groupId: string;
-  fromUserId: string;
-  toUserId: string;
-  fromUserName: string;
-  toUserName: string;
-  amountCents: number;
-  date: string;
-  note?: string;
-  createdAt: string;
 }
 
 export interface Transfer {

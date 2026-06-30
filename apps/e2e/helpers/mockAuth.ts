@@ -4,7 +4,6 @@ const FAKE_USER = {
   id: 'e2e-test-user-id',
   email: 'e2e@evenup.local',
   name: 'E2E Test User',
-  defaultMarkupRate: 0,
 };
 
 /**
@@ -29,15 +28,13 @@ export async function mockAuthedUser(page: Page): Promise<void> {
   );
 }
 
-/** Intercepts a single API path and returns the given body as JSON. Query strings are ignored. */
+/** Intercepts a single API path and returns the given body as JSON. */
 export async function mockApi(page: Page, path: string, body: unknown): Promise<void> {
-  await page.route(
-    (url) => url.pathname === path,
-    (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(body),
-      }),
+  await page.route(`**${path}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    }),
   );
 }
