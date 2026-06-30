@@ -16,7 +16,7 @@ export async function getRate(date: string, from: string, to: string): Promise<n
     const json = (await res.json()) as { rates: Record<string, number> };
     rate = json.rates[to];
     if (typeof rate !== 'number') throw new Error('Rate missing in response');
-  } catch (err) {
+  } catch {
     throw new HttpError(
       503,
       `Wechselkurs für ${from}→${to} am ${date} konnte nicht abgerufen werden.`,
