@@ -47,6 +47,19 @@ export interface NewExpenseInput {
   exactSplits?: { userId: string; owedCents: number }[];
 }
 
+export interface Settlement {
+  id: string;
+  groupId: string;
+  fromUserId: string;
+  toUserId: string;
+  fromUserName: string;
+  toUserName: string;
+  amountCents: number;
+  date: string;
+  note?: string;
+  createdAt: string;
+}
+
 export interface Transfer {
   fromUserId: string;
   toUserId: string;
