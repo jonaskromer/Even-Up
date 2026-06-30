@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@evenup/shared": "*",
-    "@react-router/fs-routes": "^8.0.0",
+    "@react-router/fs-routes": "^8.1.0",
     "@react-router/node": "^8.0.0",
     "@supabase/supabase-js": "^2.108.2",
     "class-variance-authority": "^0.7.1",
