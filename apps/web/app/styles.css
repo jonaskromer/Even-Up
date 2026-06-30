@@ -1,0 +1,440 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================================
+   EvenUp — Tailwind CSS
+   Color Palette: Stone / Sand + shadcn/ui CSS variables
+   ========================================================================= */
+
+@layer base {
+  :root {
+    --background: 39 20% 98%;
+    --foreground: 30 24% 23%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 24% 23%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 24% 23%;
+    --primary: 33 19% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 33 42% 93%;
+    --secondary-foreground: 30 24% 23%;
+    --muted: 33 42% 93%;
+    --muted-foreground: 33 19% 45%;
+    --accent: 16 47% 54%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 33% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 34% 84%;
+    --input: 33 34% 84%;
+    --ring: 33 19% 45%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 30 15% 10%;
+    --foreground: 39 20% 90%;
+    --card: 30 15% 14%;
+    --card-foreground: 39 20% 90%;
+    --popover: 30 15% 14%;
+    --popover-foreground: 39 20% 90%;
+    --primary: 33 19% 65%;
+    --primary-foreground: 30 15% 10%;
+    --secondary: 33 15% 20%;
+    --secondary-foreground: 39 20% 90%;
+    --muted: 33 15% 18%;
+    --muted-foreground: 33 19% 60%;
+    --accent: 16 47% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 40% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 33 15% 22%;
+    --input: 33 15% 22%;
+    --ring: 33 19% 55%;
+  }
+
+  * {
+    @apply box-border m-0 p-0 border-border;
+  }
+
+  body {
+    @apply font-sans text-base leading-normal antialiased bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-sand-800 mb-2 font-bold;
+  }
+
+  p {
+    @apply text-sand-600 mb-4;
+  }
+
+  a {
+    @apply text-accent no-underline transition-colors duration-150 ease-in-out;
+  }
+
+  a:hover {
+    @apply text-sand-600;
+  }
+
+  ul {
+    @apply list-none;
+  }
+}
+
+@layer components {
+  /* -----------------------------------------------------------------------
+     Layout & Structure
+     ----------------------------------------------------------------------- */
+
+  .app-container {
+    @apply flex flex-col min-h-screen;
+  }
+
+  .site-header {
+    @apply bg-white shadow-sm sticky top-0 z-50;
+  }
+
+  .site-header .header-content {
+    @apply max-w-container mx-auto px-6 py-4 flex justify-between items-center;
+  }
+
+  .brand {
+    @apply text-2xl font-extrabold text-sand-600 flex items-center gap-2;
+  }
+
+  .user-nav {
+    @apply flex gap-4 items-center;
+  }
+
+  .main-content {
+    @apply flex-1 max-w-container w-full mx-auto px-6 py-8;
+  }
+
+  .site-footer {
+    @apply text-center p-6 text-sand-600 text-sm border-t border-sand-200 mt-auto;
+  }
+
+  /* -----------------------------------------------------------------------
+     Typography Utils
+     ----------------------------------------------------------------------- */
+
+  .text-h1 {
+    @apply text-3xl leading-tight;
+  }
+
+  .text-h2 {
+    @apply text-2xl;
+  }
+
+  .text-success {
+    color: #6b8e6b;
+    @apply font-semibold;
+  }
+
+  .text-danger {
+    color: #b85c5c;
+    @apply font-semibold;
+  }
+
+  /* -----------------------------------------------------------------------
+     Section Header
+     ----------------------------------------------------------------------- */
+
+  .section-header {
+    @apply flex justify-between items-end mb-4 pb-2 border-b-2 border-sand-200;
+  }
+
+  .section-header h2 {
+    @apply mb-0;
+  }
+
+  /* -----------------------------------------------------------------------
+     Balance Banner
+     ----------------------------------------------------------------------- */
+
+  .balance-banner {
+    @apply text-white rounded-card p-8 text-center mb-8 shadow-lg;
+    background: linear-gradient(135deg, #8a795d, #4a402e);
+  }
+
+  .balance-banner h2 {
+    @apply text-white/80 text-base uppercase tracking-wider;
+  }
+
+  .balance-amount {
+    @apply text-5xl font-extrabold my-2 block;
+  }
+
+  /* -----------------------------------------------------------------------
+     Group List & Cards
+     ----------------------------------------------------------------------- */
+
+  .group-list {
+    @apply grid gap-4;
+  }
+
+  .group-item {
+    @apply flex justify-between items-center bg-white px-6 py-4 rounded-xl shadow-sm transition-all duration-150 ease-in-out text-sand-800 border border-transparent;
+  }
+
+  .group-item:hover {
+    @apply -translate-y-0.5 shadow-md border-sand-200 text-sand-800;
+  }
+
+  .group-info {
+    @apply flex flex-col;
+  }
+
+  .group-name {
+    @apply font-bold text-lg;
+  }
+
+  .group-meta {
+    @apply text-sm text-sand-600;
+  }
+
+  .group-balance {
+    @apply text-right flex flex-col;
+  }
+
+  .balance-label {
+    @apply text-sm text-sand-600;
+  }
+
+  /* -----------------------------------------------------------------------
+     Layout Grid
+     ----------------------------------------------------------------------- */
+
+  .grid-2 {
+    @apply grid grid-cols-[2fr_1fr] gap-6;
+  }
+
+  /* -----------------------------------------------------------------------
+     Expense Feed
+     ----------------------------------------------------------------------- */
+
+  .expense-feed {
+    @apply flex flex-col gap-4;
+  }
+
+  .expense-item {
+    @apply flex items-center gap-4 py-2 border-b border-sand-200;
+  }
+
+  .expense-item:last-child {
+    @apply border-b-0;
+  }
+
+  .expense-date {
+    @apply flex flex-col items-center bg-sand-50 px-2 py-1 rounded-xl min-w-[50px];
+  }
+
+  .date-month {
+    @apply text-xs font-bold uppercase text-accent;
+  }
+
+  .date-day {
+    @apply text-lg font-bold text-sand-800;
+  }
+
+  .expense-details {
+    @apply flex-1;
+  }
+
+  .expense-title {
+    @apply font-bold mb-0.5;
+  }
+
+  .expense-payer {
+    @apply text-sm text-sand-600;
+  }
+
+  .expense-amount-box {
+    @apply text-right;
+  }
+
+  .amount-total {
+    @apply font-bold block;
+  }
+
+  .amount-share {
+    @apply text-sm block;
+  }
+
+  /* -----------------------------------------------------------------------
+     Balance List (Who owes whom)
+     ----------------------------------------------------------------------- */
+
+  .balance-list {
+    @apply flex flex-col gap-2;
+  }
+
+  .balance-item {
+    @apply flex justify-between items-center py-2 border-b border-dashed border-sand-200 text-sm;
+  }
+
+  .balance-item:last-child {
+    @apply border-b-0;
+  }
+
+  .balance-person {
+    @apply font-semibold;
+  }
+
+  /* -----------------------------------------------------------------------
+     Forms (select + prefix — shadcn handles input/label/button)
+     ----------------------------------------------------------------------- */
+
+  select.form-control {
+    @apply w-full px-4 py-3 text-base font-sans border border-sand-200 rounded-xl bg-sand-50 text-sand-800 transition-all duration-150 ease-in-out appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A795D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 16px;
+  }
+
+  select.form-control:focus {
+    @apply outline-none border-accent ring-[3px] ring-accent/10;
+  }
+
+  .input-prefix-wrapper {
+    @apply relative flex items-center;
+  }
+
+  .input-prefix {
+    @apply absolute left-4 text-sand-600 font-semibold z-10;
+  }
+
+  .form-actions {
+    @apply flex gap-4 mt-8 pt-4 border-t border-sand-200;
+  }
+
+  /* -----------------------------------------------------------------------
+     Dark mode overrides for hardcoded sand colors
+     ----------------------------------------------------------------------- */
+
+  .dark h1,
+  .dark h2,
+  .dark h3,
+  .dark h4,
+  .dark h5,
+  .dark h6 {
+    @apply text-foreground;
+  }
+
+  .dark p {
+    @apply text-muted-foreground;
+  }
+
+  .dark a:hover {
+    @apply text-foreground;
+  }
+
+  .dark .site-header {
+    @apply bg-card border-b border-border shadow-none;
+  }
+
+  .dark .brand {
+    @apply text-foreground;
+  }
+
+  .dark .site-footer {
+    @apply text-muted-foreground border-border;
+  }
+
+  .dark .section-header {
+    @apply border-border;
+  }
+
+  .dark .group-item {
+    @apply bg-card text-foreground;
+  }
+
+  .dark .group-item:hover {
+    @apply border-border;
+  }
+
+  .dark .group-name {
+    @apply text-foreground;
+  }
+
+  .dark .group-meta,
+  .dark .balance-label {
+    @apply text-muted-foreground;
+  }
+
+  .dark .expense-item {
+    @apply border-border;
+  }
+
+  .dark .expense-date {
+    background-color: hsl(var(--muted));
+  }
+
+  .dark .date-month {
+    @apply text-accent;
+  }
+
+  .dark .date-day {
+    @apply text-foreground;
+  }
+
+  .dark .expense-payer {
+    @apply text-muted-foreground;
+  }
+
+  .dark .balance-item {
+    @apply border-border;
+  }
+
+  .dark select.form-control {
+    background-color: hsl(var(--muted));
+    @apply border-border text-foreground;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a39171' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  }
+
+  .dark .form-actions {
+    @apply border-border;
+  }
+
+  .dark .text-success {
+    color: #7faa7f;
+  }
+
+  .dark .text-danger {
+    color: #d47777;
+  }
+
+  /* -----------------------------------------------------------------------
+     Responsive
+     ----------------------------------------------------------------------- */
+
+  @media (max-width: 768px) {
+    .grid-2 {
+      @apply grid-cols-1;
+    }
+
+    .balance-amount {
+      @apply text-4xl;
+    }
+
+    .main-content {
+      @apply px-4 py-4;
+    }
+
+    .user-nav {
+      @apply gap-2;
+    }
+
+    .form-actions {
+      @apply flex-wrap;
+    }
+  }
+}

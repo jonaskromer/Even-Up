@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, dev]
+
+jobs:
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=high
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm exec --workspace=apps/api -- prisma generate
+      - run: npm exec --workspace=apps/api -- tsc --noEmit
+      - run: npm exec --workspace=apps/web -- react-router typegen
+      - run: npm exec --workspace=apps/web -- tsc --noEmit
+
+  test-api:
+    name: API Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: evenup
+          POSTGRES_PASSWORD: evenup_dev
+          POSTGRES_DB: evenup
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U evenup"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql://evenup:evenup_dev@localhost:5432/evenup
+      SUPABASE_URL: https://ci-test.supabase.co
+      SUPABASE_ANON_KEY: ci-test-anon-key
+      SUPABASE_JWT_SECRET: ci-test-secret-at-least-16-chars
+      PORT: 4000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm exec --workspace=apps/api -- prisma generate
+      - run: npm exec --workspace=apps/api -- prisma migrate deploy
+      - run: npm test --workspace=apps/api
+
+  test-web:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test --workspace=apps/web
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: https://placeholder.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: placeholder-key
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/e2e/package.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/e2e
+      - run: npm run test:e2e
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7
+
+  docker-build:
+    name: Docker Build & Smoke Test
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: https://ci-test.supabase.co
+      SUPABASE_ANON_KEY: ci-test-anon-key
+      SUPABASE_JWT_SECRET: ci-test-secret-at-least-16-chars
+      VITE_SUPABASE_URL: https://ci-test.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: ci-test-publishable-key
+      POSTGRES_PASSWORD: ci-test-password
+      COMPOSE_PROJECT_NAME: evenup-ci
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose -f docker-compose.prod.yml build
+      - run: docker compose -f docker-compose.prod.yml up -d
+      - name: Wait for services to become healthy
+        run: |
+          for i in $(seq 1 30); do
+            db=$(docker inspect -f '{{.State.Health.Status}}' evenup-ci-db-1 2>/dev/null || echo "starting")
+            api=$(docker inspect -f '{{.State.Health.Status}}' evenup-ci-api-1 2>/dev/null || echo "starting")
+            if [ "$db" = "healthy" ] && [ "$api" = "healthy" ]; then
+              echo "All services healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Services did not become healthy in time"
+          docker compose -f docker-compose.prod.yml logs
+          exit 1
+      - name: Smoke test through public entrypoint
+        run: |
+          set -e
+          # caddy (DOMAIN unset -> localhost) uses its internal CA and redirects HTTP -> HTTPS,
+          # same as it will with a real domain + Let's Encrypt. -k accepts the local cert,
+          # -L follows the redirect. Retry briefly while caddy finishes generating its cert.
+          for i in $(seq 1 15); do
+            if curl -skf https://localhost/api/health -o /dev/null; then break; fi
+            sleep 2
+          done
+          curl -skfL http://localhost/ -o /dev/null
+          curl -skf https://localhost/api/health
+          # /api/auth/me requires a real Supabase-issued token, which this CI run has
+          # no access to; confirm the auth middleware itself is wired up by checking
+          # that an unauthenticated request is rejected.
+          status=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost/api/auth/me)
+          [ "$status" = "401" ]
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs
+      - run: docker compose -f docker-compose.prod.yml down -v

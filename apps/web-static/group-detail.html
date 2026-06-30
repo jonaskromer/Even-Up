@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EvenUp - Gemeinsame Ausgaben einfach aufteilen">
+  <title>Ski-Trip 2026 - EvenUp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-container">
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-content">
+      <a href="index.html" class="brand">
+        <!-- Back Arrow (optional but nice) -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        Übersicht
+      </a>
+      <nav class="user-nav">
+        <a href="add-expense.html" class="btn btn-primary">Ausgabe hinzufügen</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    
+    <!-- Title Section -->
+    <header class="mb-8">
+      <h1 class="text-h1 mb-1">Ski-Trip 2026</h1>
+      <p class="text-muted">4 Mitglieder • Created Jan 15, 2026</p>
+    </header>
+
+    <div class="grid-2">
+      <!-- Left Column: Feed -->
+      <section class="feed-section">
+        <header class="section-header">
+          <h2>Ausgaben</h2>
+        </header>
+
+        <article class="card expense-feed">
+          
+          <!-- Expense 1 -->
+          <div class="expense-item">
+            <div class="expense-date">
+              <span class="date-month">Mrz</span>
+              <span class="date-day">30</span>
+            </div>
+            <div class="expense-details">
+              <h3 class="expense-title">Skipass 3 Tage</h3>
+              <span class="expense-payer">Julian hat bezahlt</span>
+            </div>
+            <div class="expense-amount-box text-danger">
+              <span class="amount-total">340,00 €</span>
+              <span class="amount-share">Du schuldest 85,00 €</span>
+            </div>
+          </div>
+
+          <!-- Expense 2 -->
+          <div class="expense-item">
+            <div class="expense-date">
+              <span class="date-month">Mrz</span>
+              <span class="date-day">29</span>
+            </div>
+            <div class="expense-details">
+              <h3 class="expense-title">Großeinkauf Supermarkt</h3>
+              <span class="expense-payer">Du hast bezahlt</span>
+            </div>
+            <div class="expense-amount-box text-success">
+              <span class="amount-total">160,00 €</span>
+              <span class="amount-share">Du bekommst 120,00 €</span>
+            </div>
+          </div>
+
+          <!-- Expense 3 -->
+          <div class="expense-item">
+            <div class="expense-date">
+              <span class="date-month">Mrz</span>
+              <span class="date-day">28</span>
+            </div>
+            <div class="expense-details">
+              <h3 class="expense-title">Maut + Vignette</h3>
+              <span class="expense-payer">Lisa hat bezahlt</span>
+            </div>
+            <div class="expense-amount-box text-danger">
+              <span class="amount-total">28,50 €</span>
+              <span class="amount-share">Du schuldest 7,13 €</span>
+            </div>
+          </div>
+
+        </article>
+      </section>
+
+      <!-- Right Column: Balances -->
+      <aside class="sidebar">
+        <section class="balances-section card">
+          <header class="section-header">
+            <h2>Salden & Ausgleich</h2>
+          </header>
+          
+          <div class="mb-6">
+            <div class="text-success text-xl font-extrabold font-mono">+ 27,87 €</div>
+            <p class="text-muted text-sm mb-0">In dieser Gruppe</p>
+          </div>
+
+          <h3 class="text-sm uppercase text-accent tracking-wider">Wer schuldet wem?</h3>
+
+          <div class="balance-list mt-4">
+            <div class="balance-item">
+              <span>Du schuldest <strong class="balance-person">Julian</strong></span>
+              <strong class="text-danger">85,00 €</strong>
+            </div>
+            <div class="balance-item">
+              <span>Du schuldest <strong class="balance-person">Lisa</strong></span>
+              <strong class="text-danger">7,13 €</strong>
+            </div>
+            <div class="balance-item">
+              <span><strong class="balance-person">Max</strong> schuldet dir</span>
+              <strong class="text-success">40,00 €</strong>
+            </div>
+            <div class="balance-item">
+              <span><strong class="balance-person">Lisa</strong> schuldet dir</span>
+              <strong class="text-success">40,00 €</strong>
+            </div>
+            <div class="balance-item">
+              <span><strong class="balance-person">Julian</strong> schuldet dir</span>
+              <strong class="text-success">40,00 €</strong>
+            </div>
+          </div>
+          
+          <div class="mt-6 pt-4 border-t border-sand-200">
+            <button class="btn btn-outline btn-block">Schulden vereinfachen</button>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 EvenUp</p>
+  </footer>
+
+</body>
+</html>

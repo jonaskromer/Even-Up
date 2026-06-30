@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EvenUp - Gemeinsame Ausgaben einfach aufteilen">
+  <title>Dashboard - EvenUp</title>
+  
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-container">
+
+  <!-- Header & Navigation -->
+  <header class="site-header">
+    <div class="header-content">
+      <a href="index.html" class="brand">
+        <!-- Minimal Logo SVG purely illustrative -->
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="2" x2="12" y2="22"></line>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+        </svg>
+        EvenUp
+      </a>
+      <nav class="user-nav">
+        <a href="#" class="text-muted">Protokoll</a>
+        <a href="#" class="text-muted">Profil</a>
+        <a href="#" class="btn btn-primary btn-sm">Abmelden</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    
+    <!-- Balance Summary Banner -->
+    <section class="balance-banner">
+      <h2>Gesamtsaldo</h2>
+      <span class="balance-amount">+ 42,50 €</span>
+      <p class="text-white/80 mb-0">Du bekommst insgesamt Geld zurück.</p>
+    </section>
+
+    <!-- Groups Section -->
+    <section class="groups-section">
+      <header class="section-header">
+        <h2>Deine Gruppen</h2>
+        <a href="#" class="btn btn-outline btn-sm">Neue Gruppe</a>
+      </header>
+      
+      <article class="group-list">
+        
+        <!-- Group 1 -->
+        <a href="group-detail.html" class="group-item">
+          <div class="group-info">
+            <h3 class="group-name">Ski-Trip 2026</h3>
+            <span class="group-meta">4 Mitglieder • Letzte Aktivität gestern</span>
+          </div>
+          <div class="group-balance text-success">
+            <span class="balance-label">Du bekommst</span>
+            <strong>240,00 €</strong>
+          </div>
+        </a>
+
+        <!-- Group 2 -->
+        <a class="group-item">
+          <div class="group-info">
+            <h3 class="group-name">WG Sonnenstraße</h3>
+            <span class="group-meta">3 Mitglieder • Letzte Aktivität heute</span>
+          </div>
+          <div class="group-balance text-danger">
+            <span class="balance-label">Du schuldest</span>
+            <strong>- 197,50 €</strong>
+          </div>
+        </a>
+
+      </article>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <p>&copy; 2026 EvenUp</p>
+  </footer>
+
+</body>
+</html>

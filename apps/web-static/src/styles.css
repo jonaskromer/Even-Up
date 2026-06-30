@@ -1,0 +1,395 @@
+@import "../node_modules/tailwindcss/index.css";
+
+/* =========================================================================
+   EvenUp — Static Prototype (Tailwind CSS)
+   Color Palette: Chocolate Truffle
+   ========================================================================= */
+
+@theme {
+  --color-white: #fff;
+  --color-sand-50: #FBFBFA;
+  --color-sand-100: #F5EFE6;
+  --color-sand-200: #E6DCC8;
+  --color-sand-300: #D4C4A8;
+  --color-sand-400: #BCA888;
+  --color-sand-500: #A39171;
+  --color-sand-600: #8A795D;
+  --color-sand-700: #685A44;
+  --color-sand-800: #4A402E;
+  --color-sand-900: #2E281C;
+
+
+
+  --color-accent: #000000;
+  --color-accent-hover: #A35D3B;
+
+  --color-success: #6B8E6B;
+  --color-danger: #B85C5C;
+
+  /* Typography */
+  --font-sans: "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Open Sans", "Helvetica Neue", sans-serif;
+
+  /* Spacing / Sizing */
+  --max-width-container: 800px;
+
+  /* Borders */
+  --radius-card: 20px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(56, 36, 13, 0.05);
+  --shadow-md: 0 4px 12px rgba(56, 36, 13, 0.08);
+  --shadow-lg: 0 12px 24px rgba(56, 36, 13, 0.12);
+}
+
+@layer base {
+  * {
+    @apply box-border m-0 p-0;
+  }
+
+  body {
+    @apply font-sans text-base text-stone-800 bg-sand-50 leading-normal antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-sand-800 mb-2 font-bold;
+  }
+
+  p {
+    @apply text-sand-600 mb-4;
+  }
+
+  a {
+    @apply text-accent no-underline transition-colors duration-150 ease-in-out;
+  }
+
+  a:hover {
+    @apply text-sand-600;
+  }
+
+  ul {
+    @apply list-none;
+  }
+}
+
+@layer components {
+  /* -----------------------------------------------------------------------
+     Layout & Structure
+     ----------------------------------------------------------------------- */
+
+  .app-container {
+    @apply flex flex-col min-h-screen;
+  }
+
+  .site-header {
+    @apply bg-white shadow-sm sticky top-0 z-50;
+  }
+
+  .site-header .header-content {
+    @apply max-w-container mx-auto px-6 py-4 flex justify-between items-center;
+  }
+
+  .brand {
+    @apply text-2xl font-extrabold text-sand-600 flex items-center gap-2;
+  }
+
+  .user-nav {
+    @apply flex gap-4 items-center;
+  }
+
+  .main-content {
+    @apply flex-1 max-w-container w-full mx-auto px-6 py-8;
+  }
+
+  .site-footer {
+    @apply text-center p-6 text-sand-600 text-sm border-t border-sand-200 mt-auto;
+  }
+
+  /* -----------------------------------------------------------------------
+     Typography Utils
+     ----------------------------------------------------------------------- */
+
+  .text-h1 {
+    @apply text-3xl leading-tight;
+  }
+
+  .text-h2 {
+    @apply text-2xl;
+  }
+
+  .text-muted {
+    @apply text-sand-600;
+  }
+
+  .text-success {
+    color: #2E7D32;
+    @apply font-semibold;
+  }
+
+  .text-danger {
+    color: #C62828;
+    @apply font-semibold;
+  }
+
+  /* -----------------------------------------------------------------------
+     Buttons
+     ----------------------------------------------------------------------- */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-semibold text-base border-none cursor-pointer transition-all duration-150 ease-in-out no-underline font-sans;
+  }
+
+  .btn:active {
+    @apply scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply bg-sand-600 text-white shadow-sm;
+  }
+
+  .btn-primary:hover {
+    @apply bg-sand-700 text-white shadow-md;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-white;
+  }
+
+  .btn-accent:hover {
+    @apply bg-accent-hover text-white;
+  }
+
+  .btn-outline {
+    @apply bg-transparent text-sand-600 border-2 border-sand-600;
+  }
+
+  .btn-outline:hover {
+    @apply bg-sand-600 text-white;
+  }
+
+  .btn-sm {
+    @apply px-4 py-2 text-sm;
+  }
+
+  .btn-block {
+    @apply w-full;
+  }
+
+  /* -----------------------------------------------------------------------
+     Cards
+     ----------------------------------------------------------------------- */
+
+  .card {
+    @apply bg-white rounded-card p-6 shadow-md mb-6 border border-sand-600/5;
+  }
+
+  /* -----------------------------------------------------------------------
+     Section Header
+     ----------------------------------------------------------------------- */
+
+  .section-header {
+    @apply flex justify-between items-end mb-4 pb-2 border-b-2 border-sand-200;
+  }
+
+  .section-header h2 {
+    @apply mb-0;
+  }
+
+  /* -----------------------------------------------------------------------
+     Balance Banner
+     ----------------------------------------------------------------------- */
+
+  .balance-banner {
+    @apply text-white rounded-card p-8 text-center mb-8 shadow-lg;
+    background: linear-gradient(135deg, var(--color-indigo-200), var(--color-indigo-800));
+  }
+
+  .balance-banner h2 {
+    @apply text-white/80 text-base uppercase tracking-wider;
+  }
+
+  .balance-amount {
+    @apply text-5xl font-extrabold my-2 block;
+  }
+
+  /* -----------------------------------------------------------------------
+     Group List & Cards
+     ----------------------------------------------------------------------- */
+
+  .group-list {
+    @apply grid gap-4;
+  }
+
+  .group-item {
+    @apply flex justify-between items-center bg-white px-6 py-4 rounded-xl shadow-sm transition-all duration-150 ease-in-out text-sand-800 border border-transparent;
+  }
+
+  .group-item:hover {
+    @apply -translate-y-0.5 shadow-md border-sand-200 text-sand-800;
+  }
+
+  .group-info {
+    @apply flex flex-col;
+  }
+
+  .group-name {
+    @apply font-bold text-lg;
+  }
+
+  .group-meta {
+    @apply text-sm text-sand-600;
+  }
+
+  .group-balance {
+    @apply text-right flex flex-col;
+  }
+
+  .balance-label {
+    @apply text-sm text-sand-600;
+  }
+
+  /* -----------------------------------------------------------------------
+     Layout Grid
+     ----------------------------------------------------------------------- */
+
+  .grid-2 {
+    @apply grid grid-cols-[2fr_1fr] gap-6;
+  }
+
+  /* -----------------------------------------------------------------------
+     Expense Feed
+     ----------------------------------------------------------------------- */
+
+  .expense-feed {
+    @apply flex flex-col gap-4;
+  }
+
+  .expense-item {
+    @apply flex items-center gap-4 py-2 border-b border-sand-200;
+  }
+
+  .expense-item:last-child {
+    @apply border-b-0;
+  }
+
+  .expense-date {
+    @apply flex flex-col items-center bg-sand-50 px-2 py-1 rounded-xl min-w-[50px];
+  }
+
+  .date-month {
+    @apply text-xs font-bold uppercase text-accent;
+  }
+
+  .date-day {
+    @apply text-lg font-bold text-sand-800;
+  }
+
+  .expense-details {
+    @apply flex-1;
+  }
+
+  .expense-title {
+    @apply font-bold mb-0.5;
+  }
+
+  .expense-payer {
+    @apply text-sm text-sand-600;
+  }
+
+  .expense-amount-box {
+    @apply text-right;
+  }
+
+  .amount-total {
+    @apply font-bold block;
+  }
+
+  .amount-share {
+    @apply text-sm block;
+  }
+
+  /* -----------------------------------------------------------------------
+     Balance List (Who owes whom)
+     ----------------------------------------------------------------------- */
+
+  .balance-list {
+    @apply flex flex-col gap-2;
+  }
+
+  .balance-item {
+    @apply flex justify-between items-center py-2 border-b border-dashed border-sand-200 text-sm;
+  }
+
+  .balance-item:last-child {
+    @apply border-b-0;
+  }
+
+  .balance-person {
+    @apply font-semibold;
+  }
+
+  /* -----------------------------------------------------------------------
+     Forms
+     ----------------------------------------------------------------------- */
+
+  .form-group {
+    @apply mb-6;
+  }
+
+  .form-label {
+    @apply block font-semibold mb-2 text-sand-800;
+  }
+
+  .form-control {
+    @apply w-full px-4 py-3 text-base font-sans border border-sand-200 rounded-xl bg-sand-50 text-sand-800 transition-all duration-150 ease-in-out;
+  }
+
+  .form-control:focus {
+    @apply outline-none border-accent ring-[3px] ring-accent/10;
+  }
+
+  textarea.form-control {
+    @apply resize-y min-h-[100px];
+  }
+
+  select.form-control {
+    @apply appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23713600' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 16px;
+  }
+
+  .input-prefix-wrapper {
+    @apply relative flex items-center;
+  }
+
+  .input-prefix {
+    @apply absolute left-4 text-sand-600 font-semibold;
+  }
+
+  .input-prefix-wrapper .form-control {
+    @apply pl-8;
+  }
+
+  .form-actions {
+    @apply flex gap-4 mt-8 pt-4 border-t border-sand-200;
+  }
+
+  /* -----------------------------------------------------------------------
+     Responsive
+     ----------------------------------------------------------------------- */
+
+  @media (max-width: 768px) {
+    .grid-2 {
+      @apply grid-cols-1;
+    }
+
+    .balance-amount {
+      @apply text-4xl;
+    }
+
+    .main-content {
+      @apply px-4 py-4;
+    }
+  }
+}

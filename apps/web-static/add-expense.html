@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EvenUp - Gemeinsame Ausgaben einfach aufteilen">
+  <title>Ausgabe hinzufügen - EvenUp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="app-container">
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-content">
+      <a href="group-detail.html" class="brand">
+        <!-- Back Arrow -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        Zurück zur Gruppe
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="main-content max-w-[600px]">
+
+    <header class="mb-8">
+      <h1 class="text-h1">Ausgabe hinzufügen</h1>
+      <p class="text-muted">Füge eine neue Ausgabe in "Ski-Trip 2026" hinzu.</p>
+    </header>
+
+    <section class="card">
+      <!-- M1 is a static prototype without Javascript, so this form just simulates submitting -->
+      <form action="group-detail.html" method="GET">
+        
+        <div class="form-group">
+          <label for="expense-desc" class="form-label">Titel / Wofür?</label>
+          <input type="text" id="expense-desc" name="description" class="form-control" placeholder="z. B. Abendessen Luigi" required>
+        </div>
+
+        <div class="form-group">
+          <label for="expense-amount" class="form-label">Betrag</label>
+          <div class="input-prefix-wrapper">
+            <span class="input-prefix">€</span>
+            <input type="number" id="expense-amount" name="amount" class="form-control" placeholder="0.00" step="0.01" min="0" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="expense-payer" class="form-label">Wer hat bezahlt?</label>
+          <select id="expense-payer" name="payer" class="form-control" required>
+            <option value="you" selected>Du</option>
+            <option value="julian">Julian</option>
+            <option value="lisa">Lisa</option>
+            <option value="max">Max</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="expense-split" class="form-label">Aufteilung</label>
+          <select id="expense-split" name="split" class="form-control" required>
+            <option value="equal" selected>Gleichmäßig auf alle (4)</option>
+            <option value="exact">Genaue Beträge</option>
+            <option value="percent">Prozentual (%)</option>
+            <option value="shares">Anteile</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="expense-date" class="form-label">Datum</label>
+          <input type="date" id="expense-date" name="date" class="form-control" value="2026-03-30" required>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary flex-1">Speichern</button>
+          <a href="group-detail.html" class="btn btn-outline flex-1">Abbrechen</a>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 EvenUp</p>
+  </footer>
+
+</body>
+</html>

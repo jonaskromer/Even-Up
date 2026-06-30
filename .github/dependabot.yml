@@ -1,0 +1,47 @@
+version: 2
+updates:
+  # npm workspaces — root package-lock.json covers all workspace packages
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # Bundle all non-breaking patch/minor updates into a single PR per category
+      fastify:
+        patterns:
+          - fastify
+          - '@fastify/*'
+      react:
+        patterns:
+          - react
+          - react-dom
+          - '@types/react*'
+      react-router:
+        patterns:
+          - react-router
+          - '@react-router/*'
+      tailwind:
+        patterns:
+          - tailwindcss
+          - '@tailwindcss/*'
+      prisma:
+        patterns:
+          - prisma
+          - '@prisma/*'
+      testing:
+        patterns:
+          - vitest
+          - '@vitest/*'
+          - '@testing-library/*'
+          - '@playwright/*'
+          - playwright
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

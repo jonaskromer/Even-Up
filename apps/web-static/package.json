@@ -1,0 +1,14 @@
+{
+  "name": "evenup-web-static",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/styles.css -o ./styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/styles.css -o ./styles.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.2.2"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.2.2"
+  }
+}
