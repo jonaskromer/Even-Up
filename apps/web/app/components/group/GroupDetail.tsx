@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Balance, Expense, Group, PendingInvite } from '../../types';
+import { computePerCurrencyBalances } from '../../lib/computePerCurrencyBalances';
 import { ExpenseFeed } from './ExpenseFeed';
 import { BalancesPanel } from './BalancesPanel';
 import { SettleUpPanel } from './SettleUpPanel';
@@ -19,11 +20,6 @@ interface ActivityEntry {
   createdAt: string;
 }
 
-interface PerCurrencyBalance {
-  currency: string;
-  balances: Balance[];
-}
-
 interface GroupDetailProps {
   group: Group;
   expenses: Expense[];
@@ -33,45 +29,6 @@ interface GroupDetailProps {
   activitiesTotal: number;
   pendingInvites: PendingInvite[];
   onRevalidate: () => void;
-}
-
-function computePerCurrencyBalances(
-  expenses: Expense[],
-  memberIds: string[],
-  memberMap: Record<string, string>,
-): PerCurrencyBalance[] {
-  const byCurrency = new Map<string, Map<string, number>>();
-
-  for (const exp of expenses) {
-    const cur = exp.originalCurrency;
-    if (!byCurrency.has(cur)) {
-      const net = new Map<string, number>();
-      memberIds.forEach((id) => net.set(id, 0));
-      byCurrency.set(cur, net);
-    }
-    const net = byCurrency.get(cur)!;
-
-    // Payer gets credit in the expense's original currency
-    net.set(exp.paidByUserId, (net.get(exp.paidByUserId) ?? 0) + exp.originalAmountCents);
-
-    // Each split is proportional: ratio of their converted owedCents to total converted amountCents
-    if (exp.splits && exp.amountCents > 0) {
-      for (const split of exp.splits) {
-        const ratio = split.owedCents / exp.amountCents;
-        const originalOwed = Math.round(ratio * exp.originalAmountCents);
-        net.set(split.userId, (net.get(split.userId) ?? 0) - originalOwed);
-      }
-    }
-  }
-
-  return Array.from(byCurrency.entries()).map(([currency, net]) => ({
-    currency,
-    balances: memberIds.map((id) => ({
-      userId: id,
-      name: memberMap[id] ?? id,
-      netCents: net.get(id) ?? 0,
-    })),
-  }));
 }
 
 export function GroupDetail({

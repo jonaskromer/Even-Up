@@ -292,25 +292,32 @@ Both the API (server-side `schema.parse(req.body)`) and the frontend (type impor
 
 ## Testing Strategy
 
-### API Tests (26 tests, Vitest + `app.inject()`)
+### API Tests (65 tests, Vitest + `app.inject()`)
 
 The API tests use Fastify's `app.inject()` method for in-process HTTP testing — no network layer, no port binding, no supertest dependency.
 
-| Suite                        | Tests | What it verifies                                                                                                                                                          |
-| ---------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth.test.ts`               | 4     | Missing token → 401, valid token → 200 for a pre-existing user, lazy `User` upsert on first request for a brand-new Supabase user, no duplicate/error on a second request |
-| `balance.test.ts`            | 3     | Net sum = 0 invariant, payer credited correctly, cent rounding                                                                                                            |
-| `expenses.test.ts`           | 2     | No auth → 401, member POST → 201 with splits                                                                                                                              |
-| `settlements.test.ts`        | 4     | Record settlement → 201, settle-up suggestions, balance impact after settlement                                                                                           |
-| `debtSimplification.test.ts` | 6     | Fewer transfers than naive, net balances preserved, edge cases (zero balance, single debtor)                                                                              |
-| `joinRequests.test.ts`       | 7     | Invite creates a pending request (not a member), duplicate/self-invite rejected, accept/decline, wrong-user accept → 403                                                  |
+| Suite                        | Tests | What it verifies                                                                                                                                                                   |
+| ---------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.test.ts`               | 9     | GET /me (bearer + cookie), DELETE /me, lazy `User` upsert on first request, PATCH /me (name, preferredCurrency, validation)                                                        |
+| `balance.test.ts`            | 3     | Net sum = 0 invariant, payer credited correctly, cent rounding                                                                                                                     |
+| `computeSplits.test.ts`      | 8     | Equal mode ignores client splits, exact/percent/shares validation, rounding tolerance, outsider/duplicate userId rejected                                                           |
+| `debtSimplification.test.ts` | 6     | Fewer transfers than naive, net balances preserved, edge cases (zero balance, single debtor, 4+ people)                                                                            |
+| `exchangeRate.test.ts`       | 4     | Same currency → 1, DB cache hit, Frankfurter fetch + upsert, 503 on failure                                                                                                       |
+| `expenses.test.ts`           | 10    | POST (401, create with original fields, exactSplits), PUT (update splits, 409 stale conflict), GET single (401, fields, 404), DELETE (401, removes expense)                        |
+| `groups.test.ts`             | 7     | GET /groups (401, array), POST (creator as owner, currency field, defaults EUR, inherits preferredCurrency), GET /:id (member + non-member), GET /:id/balances                    |
+| `joinRequests.test.ts`       | 7     | Invite creates pending request, duplicate/self-invite rejected, accept/decline, wrong-user accept → 403, re-invite after accept → 409                                              |
+| `settlements.test.ts`        | 4     | Record settlement → 201, 401 without auth, settle-up suggestions, balance zeroed after settlement                                                                                 |
 
-### Frontend Tests (6 tests, Vitest + React Testing Library)
+### Frontend Tests (41 tests, Vitest + React Testing Library)
 
-| Suite                   | Tests | What it verifies                                                          |
-| ----------------------- | ----- | ------------------------------------------------------------------------- |
-| `LoadingState.test.tsx` | 3     | Default label, custom label, `role="status"` for accessibility            |
-| `ErrorState.test.tsx`   | 3     | Renders message, retry button fires callback, no button without `onRetry` |
+| Suite                                    | Tests | What it verifies                                                                                         |
+| ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------- |
+| `lib/utils.test.ts`                      | 8     | `formatCurrency` for EUR, USD, CHF, JPY, zero, negative, large amounts                                  |
+| `lib/computeBalances.test.ts`            | 12    | `formatEuro` formatting, payer credited, other-group ignored, 3-member net, multi-expense, rounding      |
+| `lib/computePerCurrencyBalances.test.ts` | 7     | Empty input, single-currency net=0, payer credited in original currency, 50/50 USD, two-currency buckets |
+| `components/group/ExpenseItem.test.tsx`  | 8     | Description rendered, you-paid vs payer-name label, `showConverted` toggle, secondary currency shown/hidden |
+| `components/feedback/LoadingState.test.tsx` | 3  | Default label, custom label, `role="status"` for accessibility                                           |
+| `components/feedback/ErrorState.test.tsx`   | 3  | Renders message, retry button fires callback, no button without `onRetry`                                |
 
 ### CI Pipeline (GitHub Actions)
 

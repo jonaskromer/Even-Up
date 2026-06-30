@@ -149,3 +149,79 @@ describe('requireAuth lazy user provisioning', () => {
     expect(count).toBe(1);
   });
 });
+
+describe('PATCH /api/auth/me', () => {
+  const patchSub = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  let patchToken: string;
+
+  beforeAll(async () => {
+    patchToken = createTestToken({
+      sub: patchSub,
+      email: 'test-auth-patch@evenup.local',
+      name: 'PatchUser',
+    });
+    // Trigger lazy provisioning so the user row exists
+    await app.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${patchToken}` },
+    });
+  });
+
+  it('returns 401 without auth', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me',
+      payload: { name: 'New Name' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('updates name successfully', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${patchToken}` },
+      payload: { name: 'Updated Name' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.name).toBe('Updated Name');
+
+    const inDb = await prisma.user.findUnique({ where: { id: patchSub } });
+    expect(inDb?.name).toBe('Updated Name');
+  });
+
+  it('updates preferredCurrency to USD', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${patchToken}` },
+      payload: { preferredCurrency: 'USD' },
+    });
+    // Returns 204 (no body) when only preferredCurrency is updated and user select isn't run
+    expect([200, 204]).toContain(res.statusCode);
+
+    const inDb = await prisma.user.findUnique({ where: { id: patchSub } });
+    expect(inDb?.preferredCurrency).toBe('USD');
+  });
+
+  it('returns 400 for an invalid currency code (length != 3)', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${patchToken}` },
+      payload: { preferredCurrency: 'USDX' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('returns 400 when no updatable fields are provided', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/auth/me',
+      headers: { authorization: `Bearer ${patchToken}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

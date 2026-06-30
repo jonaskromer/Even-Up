@@ -354,8 +354,8 @@ npm run dev                     # Vite on http://localhost:5173
 npm test
 
 # Or individually
-cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (30 tests)
-cd apps/web && npm test         # Frontend: LoadingState, ErrorState, computeBalances (13 tests)
+cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (65 tests)
+cd apps/web && npm test         # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (41 tests)
 ```
 
 ---
