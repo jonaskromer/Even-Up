@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { Balance, Expense, Group, PendingInvite } from '../../types';
 import { ExpenseFeed } from './ExpenseFeed';
@@ -18,6 +19,11 @@ interface ActivityEntry {
   createdAt: string;
 }
 
+interface PerCurrencyBalance {
+  currency: string;
+  balances: Balance[];
+}
+
 interface GroupDetailProps {
   group: Group;
   expenses: Expense[];
@@ -27,6 +33,45 @@ interface GroupDetailProps {
   activitiesTotal: number;
   pendingInvites: PendingInvite[];
   onRevalidate: () => void;
+}
+
+function computePerCurrencyBalances(
+  expenses: Expense[],
+  memberIds: string[],
+  memberMap: Record<string, string>,
+): PerCurrencyBalance[] {
+  const byCurrency = new Map<string, Map<string, number>>();
+
+  for (const exp of expenses) {
+    const cur = exp.originalCurrency;
+    if (!byCurrency.has(cur)) {
+      const net = new Map<string, number>();
+      memberIds.forEach((id) => net.set(id, 0));
+      byCurrency.set(cur, net);
+    }
+    const net = byCurrency.get(cur)!;
+
+    // Payer gets credit in the expense's original currency
+    net.set(exp.paidByUserId, (net.get(exp.paidByUserId) ?? 0) + exp.originalAmountCents);
+
+    // Each split is proportional: ratio of their converted owedCents to total converted amountCents
+    if (exp.splits && exp.amountCents > 0) {
+      for (const split of exp.splits) {
+        const ratio = split.owedCents / exp.amountCents;
+        const originalOwed = Math.round(ratio * exp.originalAmountCents);
+        net.set(split.userId, (net.get(split.userId) ?? 0) - originalOwed);
+      }
+    }
+  }
+
+  return Array.from(byCurrency.entries()).map(([currency, net]) => ({
+    currency,
+    balances: memberIds.map((id) => ({
+      userId: id,
+      name: memberMap[id] ?? id,
+      netCents: net.get(id) ?? 0,
+    })),
+  }));
 }
 
 export function GroupDetail({
@@ -40,12 +85,25 @@ export function GroupDetail({
   onRevalidate,
 }: GroupDetailProps) {
   const { t } = useLanguage();
+  const [showConverted, setShowConverted] = useState(true);
+
   const groupExpenses = expenses.filter((e) => e.groupId === group.id);
   const memberEmailMap = Object.fromEntries(group.members.map((m) => [m.id, m.email]));
+  const memberNameMap = Object.fromEntries(group.members.map((m) => [m.id, m.name]));
   const balancesWithEmail: Balance[] = balances.map((b) => ({
     ...b,
     email: memberEmailMap[b.userId],
   }));
+
+  const perCurrencyBalances = showConverted
+    ? []
+    : computePerCurrencyBalances(
+        groupExpenses,
+        group.members.map((m) => m.id),
+        memberNameMap,
+      );
+
+  const hasMixedCurrencies = groupExpenses.some((e) => e.originalCurrency !== group.currency);
 
   return (
     <>
@@ -91,16 +149,47 @@ export function GroupDetail({
           </p>
         </header>
 
+        {hasMixedCurrencies && (
+          <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-muted/50 border border-border">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showConverted}
+              onClick={() => setShowConverted((v) => !v)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                showConverted ? 'bg-primary' : 'bg-muted-foreground/40'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-lg transform transition-transform ${
+                  showConverted ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <span className="text-sm text-muted-foreground">
+              {showConverted
+                ? t('group.convertToggle.on', { currency: group.currency })
+                : t('group.convertToggle.off')}
+            </span>
+          </div>
+        )}
+
         <div className="grid-2">
           <ExpenseFeed
             key={`ef-${expensesTotal}-${groupExpenses[0]?.id ?? ''}`}
             group={group}
             initialExpenses={groupExpenses}
             total={expensesTotal}
+            showConverted={showConverted}
             onExpenseDeleted={onRevalidate}
           />
           <aside className="space-y-6">
-            <BalancesPanel balances={balancesWithEmail} />
+            <BalancesPanel
+              balances={balancesWithEmail}
+              groupCurrency={group.currency}
+              showConverted={showConverted}
+              perCurrencyBalances={perCurrencyBalances}
+            />
             <SettleUpPanel groupId={group.id} members={group.members} onSettled={onRevalidate} />
             <MembersPanel
               groupId={group.id}

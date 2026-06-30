@@ -10,6 +10,7 @@ export interface Member {
 export interface Group {
   id: string;
   name: string;
+  currency: string;
   members: Member[];
 }
 
@@ -18,6 +19,8 @@ export interface Expense {
   groupId: string;
   description: string;
   amountCents: number;
+  originalAmountCents: number;
+  originalCurrency: string;
   paidByUserId: string;
   paidByName?: string;
   date: string;
@@ -37,6 +40,7 @@ export interface NewExpenseInput {
   groupId: string;
   description: string;
   amountCents: number;
+  currency?: string;
   paidByUserId: string;
   date: string;
   splitMode: SplitMode;

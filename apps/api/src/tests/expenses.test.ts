@@ -82,6 +82,8 @@ describe('POST /api/groups/:groupId/expenses', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().description).toBe('Testausgabe');
     expect(res.json().amountCents).toBe(5000);
+    expect(res.json().originalAmountCents).toBe(5000);
+    expect(res.json().originalCurrency).toBe('EUR');
 
     const listRes = await app.inject({
       method: 'GET',

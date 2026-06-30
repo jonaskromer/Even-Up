@@ -8,11 +8,13 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
-import { cn } from '../../lib/utils';
+import { cn, CURRENCIES } from '../../lib/utils';
 
 interface ExpenseDefaults {
   description: string;
   amountCents: number;
+  originalAmountCents?: number;
+  originalCurrency?: string;
   paidByUserId: string;
   splitMode: SplitMode;
   date: string;
@@ -158,8 +160,12 @@ export function AddExpenseForm({
   const today = new Date().toISOString().slice(0, 10);
 
   const [description, setDescription] = useState(defaults?.description ?? '');
+  const [currency, setCurrency] = useState(defaults?.originalCurrency ?? group.currency ?? 'EUR');
+  // In edit mode, show the original amount (in original currency), not the converted one
+  const displayAmountCents =
+    defaults?.originalAmountCents != null ? defaults.originalAmountCents : defaults?.amountCents;
   const [amountInput, setAmountInput] = useState(
-    defaults ? (defaults.amountCents / 100).toFixed(2) : '',
+    displayAmountCents != null ? (displayAmountCents / 100).toFixed(2) : '',
   );
   const [payerId, setPayerId] = useState<string>(
     defaults?.paidByUserId ?? group.members[0]?.id ?? '',
@@ -238,6 +244,7 @@ export function AddExpenseForm({
       groupId: group.id,
       description: description.trim(),
       amountCents,
+      currency,
       paidByUserId: payerId,
       date,
       splitMode,
@@ -304,13 +311,24 @@ export function AddExpenseForm({
 
                 <div className="space-y-2">
                   <Label htmlFor="expense-amount">{t('expense.form.amountLabel')}</Label>
-                  <div className="input-prefix-wrapper">
-                    <span className="input-prefix">€</span>
+                  <div className="flex gap-2 items-center">
+                    <select
+                      aria-label={t('expense.form.currencyLabel')}
+                      className="shrink-0 w-20 rounded-md border border-input bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value)}
+                    >
+                      {CURRENCIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                     <Input
                       type="number"
                       id="expense-amount"
                       name="amount"
-                      className="pl-8"
+                      className="flex-1 min-w-0"
                       placeholder="0.00"
                       step="0.01"
                       min="0"
@@ -319,6 +337,11 @@ export function AddExpenseForm({
                       onChange={(e) => setAmountInput(e.target.value)}
                     />
                   </div>
+                  {currency !== group.currency && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('expense.form.currencyLabel')}: {currency} → {group.currency}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

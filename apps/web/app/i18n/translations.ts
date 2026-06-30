@@ -115,6 +115,12 @@ export const de = {
       light: 'Hell',
       dark: 'Dunkel',
     },
+    currency: {
+      title: 'Standardwährung',
+      label: 'Bevorzugte Währung',
+      saveOk: 'Währung gespeichert.',
+      saveError: 'Fehler beim Speichern der Währung.',
+    },
     language: {
       title: 'Sprache',
       auto: 'Automatisch (Systemsprache)',
@@ -153,6 +159,11 @@ export const de = {
     addExpenseShort: '＋',
     csvImport: 'CSV importieren',
     csvImportShort: 'CSV',
+    convertToggle: {
+      label: 'In {{currency}} umrechnen',
+      on: 'Anzeige: {{currency}} (umgerechnet)',
+      off: 'Anzeige: Originalwährungen',
+    },
   },
   expense: {
     form: {
@@ -164,6 +175,7 @@ export const de = {
       descLabel: 'Titel / Wofür?',
       descPlaceholder: 'z. B. Abendessen Luigi',
       amountLabel: 'Betrag',
+      currencyLabel: 'Währung',
       payerLabel: 'Wer hat bezahlt?',
       participantsLabel: 'Beteiligte',
       participantsError: 'Mindestens eine Person muss beteiligt sein',
@@ -435,6 +447,12 @@ export const en: typeof de = {
       light: 'Light',
       dark: 'Dark',
     },
+    currency: {
+      title: 'Default Currency',
+      label: 'Preferred currency',
+      saveOk: 'Currency saved.',
+      saveError: 'Error saving currency.',
+    },
     language: {
       title: 'Language',
       auto: 'Automatic (system language)',
@@ -473,6 +491,11 @@ export const en: typeof de = {
     addExpenseShort: '＋',
     csvImport: 'Import CSV',
     csvImportShort: 'CSV',
+    convertToggle: {
+      label: 'Convert to {{currency}}',
+      on: 'Showing: {{currency}} (converted)',
+      off: 'Showing: original currencies',
+    },
   },
   expense: {
     form: {
@@ -484,6 +507,7 @@ export const en: typeof de = {
       descLabel: 'Title / What for?',
       descPlaceholder: "e.g. Dinner at Luigi's",
       amountLabel: 'Amount',
+      currencyLabel: 'Currency',
       payerLabel: 'Who paid?',
       participantsLabel: 'Participants',
       participantsError: 'At least one person must be included',

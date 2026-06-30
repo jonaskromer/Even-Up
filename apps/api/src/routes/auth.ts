@@ -230,15 +230,23 @@ export async function authRoutes(app: FastifyInstance) {
         .object({
           name: z.string().min(1).max(100).optional(),
           lang: z.enum(['de', 'en']).optional(),
+          preferredCurrency: z.string().length(3).optional(),
         })
-        .refine((b) => b.name !== undefined || b.lang !== undefined, 'name or lang required')
+        .refine(
+          (b) => b.name !== undefined || b.lang !== undefined || b.preferredCurrency !== undefined,
+          'name, lang, or preferredCurrency required',
+        )
         .parse(req.body);
 
       let updated = null;
-      if (body.name) {
+      const userUpdate: Record<string, string> = {};
+      if (body.name) userUpdate.name = body.name.trim();
+      if (body.preferredCurrency)
+        userUpdate.preferredCurrency = body.preferredCurrency.toUpperCase();
+      if (Object.keys(userUpdate).length > 0) {
         updated = await prisma.user.update({
           where: { id: req.user!.id },
-          data: { name: body.name.trim() },
+          data: userUpdate,
           select: { id: true, email: true, name: true },
         });
       }
