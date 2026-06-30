@@ -1,10 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { mockAuthedUser, mockApi } from '../helpers/mockAuth.js';
 
+const NO_ACTIVITIES = { items: [], total: 0 };
+
 test.describe('dashboard (authenticated)', () => {
   test('shows empty state when user has no groups', async ({ page }) => {
     await mockAuthedUser(page);
     await mockApi(page, '/api/groups', []);
+    await mockApi(page, '/api/activities', NO_ACTIVITIES);
 
     await page.goto('/');
 
@@ -15,9 +18,10 @@ test.describe('dashboard (authenticated)', () => {
   test('renders group list when groups exist', async ({ page }) => {
     await mockAuthedUser(page);
     await mockApi(page, '/api/groups', [
-      { id: 'group-1', name: 'Ski Trip 2026', createdAt: '2026-01-01T00:00:00Z', members: [] },
+      { id: 'group-1', name: 'Ski Trip 2026', currency: 'EUR', createdAt: '2026-01-01T00:00:00Z', members: [] },
     ]);
     await mockApi(page, '/api/groups/group-1/balances', []);
+    await mockApi(page, '/api/activities', NO_ACTIVITIES);
 
     await page.goto('/');
 
@@ -27,6 +31,7 @@ test.describe('dashboard (authenticated)', () => {
   test('clicking "Erste Gruppe erstellen" navigates to /groups/new', async ({ page }) => {
     await mockAuthedUser(page);
     await mockApi(page, '/api/groups', []);
+    await mockApi(page, '/api/activities', NO_ACTIVITIES);
 
     await page.goto('/');
     await page.getByRole('button', { name: 'Erste Gruppe erstellen' }).click();
@@ -37,6 +42,7 @@ test.describe('dashboard (authenticated)', () => {
   test('"Neue Gruppe" header button also navigates to /groups/new', async ({ page }) => {
     await mockAuthedUser(page);
     await mockApi(page, '/api/groups', []);
+    await mockApi(page, '/api/activities', NO_ACTIVITIES);
 
     await page.goto('/');
     await page.getByRole('link', { name: 'Neue Gruppe' }).click();
