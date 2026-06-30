@@ -121,6 +121,25 @@ describe('ExpenseItem', () => {
     expect(amountBox?.textContent).toContain('$');
   });
 
+  it('shows markup hint when appliedMarkupRate > 0', () => {
+    const expense: Expense = { ...baseExpense, appliedMarkupRate: 2 };
+    wrap(<ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).toMatch(/incl\. 2%/);
+  });
+
+  it('does not show markup hint when appliedMarkupRate is 0', () => {
+    wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).not.toMatch(/incl\./);
+  });
+
   it('renders edit and delete buttons', () => {
     wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // Edit link
