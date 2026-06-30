@@ -20,6 +20,9 @@ A web application for splitting expenses fairly among groups. Create groups for 
 ### Expense Tracking
 
 - Log expenses with title, amount, date, and payer
+- **Multi-currency** — choose any of 31 currencies (ECB/Frankfurter API) per expense; the API converts to the group's base currency using the historical exchange rate for the expense date; rates are cached permanently in the DB; original amount and currency are always stored for display
+- Group currency toggle: view balances either converted to the group's base currency or broken down per original currency
+- Preferred currency is saved per user account and used when creating a new group
 - Select how the cost is split:
   - **Equal** — evenly among all members
   - **Exact** — specific amounts per person
@@ -121,15 +124,16 @@ All monetary values are stored as **integer cents** to avoid floating-point roun
 
 | Entity               | Key Fields                                                                   |
 | -------------------- | ---------------------------------------------------------------------------- |
-| **User**             | id (Supabase Auth user id), name, email, createdAt                           |
-| **Group**            | id, name, createdAt, updatedAt                                               |
+| **User**             | id (Supabase Auth user id), name, email, preferredCurrency, createdAt        |
+| **Group**            | id, name, currency (base currency), createdAt, updatedAt                     |
 | **GroupMember**      | groupId, userId, role                                                        |
-| **Expense**          | id, groupId, paidByUserId, description, amountCents, splitMode, date         |
+| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, splitMode, date |
 | **ExpenseSplit**     | expenseId, userId, owedCents                                                 |
 | **Settlement**       | id, groupId, fromUserId, toUserId, amountCents, date, note?                  |
 | **GroupInvite**      | id, token (unique), groupId, createdBy, expiresAt                            |
 | **Activity**         | id, groupId, userId, type, data (JSON), createdAt                            |
 | **GroupJoinRequest** | id, groupId, invitedUserId, invitedByUserId, status, createdAt, respondedAt? |
+| **ExchangeRate**     | id, date, fromCurrency, toCurrency, rate (unique on date+from+to — permanent cache) |
 
 Credentials and password-reset tokens live entirely in Supabase Auth's own `auth.users`
 table (managed by Supabase, separate from this database) — there is no `passwordHash`
@@ -145,9 +149,10 @@ Sign-up, login, logout, and password reset go directly from the frontend to Supa
 Auth via `@supabase/supabase-js` — they're not API endpoints. The API only verifies the
 resulting JWT (`requireAuth`) and exposes:
 
-| Method | Path           | Description                                 |
-| ------ | -------------- | ------------------------------------------- |
-| GET    | `/api/auth/me` | Current user profile (this DB's view of it) |
+| Method | Path             | Description                                 |
+| ------ | ---------------- | ------------------------------------------- |
+| GET    | `/api/auth/me`   | Current user profile (this DB's view of it) |
+| PATCH  | `/api/auth/me`   | Update name, language, or preferred currency |
 
 ### Groups
 
@@ -164,8 +169,9 @@ resulting JWT (`requireAuth`) and exposes:
 | Method | Path                            | Description                |
 | ------ | ------------------------------- | -------------------------- |
 | GET    | `/api/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
-| POST   | `/api/groups/:id/expenses`      | Create expense with splits |
-| PUT    | `/api/groups/:id/expenses/:eid` | Update expense             |
+| POST   | `/api/groups/:id/expenses`      | Create expense with splits (optional `currency` field triggers conversion) |
+| GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) |
+| PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` field triggers conversion) |
 | DELETE | `/api/groups/:id/expenses/:eid` | Delete expense             |
 
 ### Settlements
@@ -246,13 +252,14 @@ resulting JWT (`requireAuth`) and exposes:
 │   │   │   │                   # requireGroupMember, errorHandler
 │   │   │   ├── services/       # balanceService, debtSimplificationService, authService
 │   │   │   │                   # (Supabase JWT verification via jose), activityService,
-│   │   │   │                   # emailService
+│   │   │   │                   # emailService, exchangeRateService (Frankfurter + DB cache)
 │   │   │   ├── generated/     # Prisma 7 generated client
 │   │   │   ├── app.ts         # Fastify app factory (buildApp)
 │   │   │   └── server.ts      # Entry point (listen)
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma  # 9 models (User, Group, GroupMember, Expense, ExpenseSplit,
-│   │   │   │                  #           Settlement, GroupInvite, Activity, GroupJoinRequest)
+│   │   │   ├── schema.prisma  # 10 models (User, Group, GroupMember, Expense, ExpenseSplit,
+│   │   │   │                  #            Settlement, GroupInvite, Activity, GroupJoinRequest,
+│   │   │   │                  #            ExchangeRate)
 │   │   │   └── seed.ts
 │   │   └── prisma.config.ts   # Prisma 7 config (datasource URL for migrations)
 │   └── web-static/             # M1 HTML/CSS prototype (archive)
@@ -263,10 +270,12 @@ resulting JWT (`requireAuth`) and exposes:
 │   ├── architecture.md         # System, frontend & API architecture diagrams
 │   ├── api-reference.md        # Full REST API documentation with examples
 │   └── adr/
-│       ├── 001-spa-mode.md     # SPA vs SSR decision record
+│       ├── 001-spa-mode.md        # SPA vs SSR decision record
 │       ├── 002-debt-simplification.md  # Min-cash-flow algorithm rationale
 │       ├── 003-prisma-driver-adapter.md # Prisma 5 → 7 migration
-│       └── 004-supabase-auth.md # Custom JWT → Supabase Auth (Cloud) migration
+│       ├── 004-supabase-auth.md   # Custom JWT → Supabase Auth (Cloud) migration
+│       ├── 005-009-…              # BFF session, server-side splits, RR v8, CSP, pagination
+│       └── 010-multi-currency.md  # Per-expense currency, Frankfurter API, DB rate cache
 ├── docker-compose.yml          # PostgreSQL 16 (development)
 ├── docker-compose.prod.yml     # Production (Caddy + frontend + API + Postgres)
 ├── Caddyfile                   # Reverse proxy + automatic HTTPS (Let's Encrypt or local CA)
@@ -334,14 +343,9 @@ npm run dev                     # Vite on http://localhost:5173
 
 ### Demo Account
 
-| Email               | Group                          |
-| ------------------- | ------------------------------ |
-| `demo@evenup.local` | Ski Trip 2026 (with anna, ben) |
-
-The seed only creates this app's `User` row (fixed UUID, no password — see
-`apps/api/prisma/seed.ts`); it has no corresponding Supabase Auth user, so it can't be
-logged into until you create a matching Supabase Auth user with the same UUID via the
-Admin API (Authentication → Users → Add User).
+| Email               | Password            | Group                                |
+| ------------------- |---------------------|--------------------------------------|
+| `demo@evenup.local` | demo                | Ski Trip 2026 (with anna, ben) |
 
 ### Running Tests
 
@@ -350,8 +354,8 @@ Admin API (Authentication → Users → Add User).
 npm test
 
 # Or individually
-cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests (26 tests)
-cd apps/web && npm test         # Frontend: LoadingState, ErrorState (6 tests)
+cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (65 tests)
+cd apps/web && npm test         # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (41 tests)
 ```
 
 ---
@@ -585,10 +589,12 @@ self-hosted Postgres + Prisma database for all application data. See
 - [x] Supabase's confirmation/reset emails routed through the existing Resend account
       (custom SMTP) with branded templates — exactly one signup email, not two
 - [x] Test suite rewritten to mock JWT verification instead of minting real tokens
+- [x] Stretch: multi-currency support — per-expense currency selection (31 ECB currencies),
+      historical exchange rates via Frankfurter API, permanent DB cache, original amount
+      preserved for display, per-currency balance breakdown toggle; see [ADR 010](docs/adr/010-multi-currency.md)
 - [ ] Stretch: recurring expenses (rent, subscriptions)
 - [ ] Stretch: receipt photo upload
 - [ ] Stretch: charts and spending statistics per group
-- [ ] Stretch: multi-currency support
 
 ---
 
@@ -609,12 +615,12 @@ self-hosted Postgres + Prisma database for all application data. See
 | [ADR 007 — React Router v8 / Node 22](docs/adr/007-react-router-v8-node22-upgrade.md) | Upgrade rationale, cross-platform lockfile fix, eslint-plugin-react-hooks v7 migration                        |
 | [ADR 008 — CSP Build-time Hash Injection](docs/adr/008-csp-build-time-hash-injection.md) | Content Security Policy with inline-script hashes injected at build time via Vite plugin                    |
 | [ADR 009 — Load-more Pagination](docs/adr/009-load-more-pagination.md)                 | Offset-based pagination for expenses/activities: `{ items, total }` shape, key-prop reset pattern             |
+| [ADR 010 — Multi-currency](docs/adr/010-multi-currency.md)                             | Per-expense currency with historical ECB rates via Frankfurter API; permanent DB cache; dual-amount storage    |
 
 ---
 
 ## Known Limitations
 
-- Single currency (EUR) only — no conversion
 - No real-time sync — uses `useRevalidator` for manual refresh after mutations
 - Split modes beyond "equal" (percentage, shares) are selectable in the UI but not fully wired end-to-end — the API always stores the exact cent amounts calculated at submission
 - Deleting a user in Supabase Auth does not cascade to the local `User` row or its relations — an accepted gap, not handled via a Database Webhook (see [ADR 004](docs/adr/004-supabase-auth.md))

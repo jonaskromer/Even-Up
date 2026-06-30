@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Expense, Group } from '../../types';
-import { formatEuro } from '../../lib/computeBalances';
+import { formatCurrency } from '../../lib/utils';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../lib/apiClient';
@@ -10,10 +10,11 @@ import { Button } from '../ui/button';
 interface ExpenseItemProps {
   expense: Expense;
   group: Group;
+  showConverted: boolean;
   onDeleted: () => void;
 }
 
-export function ExpenseItem({ expense, group, onDeleted }: ExpenseItemProps) {
+export function ExpenseItem({ expense, group, showConverted, onDeleted }: ExpenseItemProps) {
   const { user } = useAuth();
   const { t, lang } = useLanguage();
   const currentUserId = user?.id ?? '';
@@ -27,13 +28,21 @@ export function ExpenseItem({ expense, group, onDeleted }: ExpenseItemProps) {
           name: expense.paidByName ?? payer?.name ?? t('common.unknown'),
         });
 
+  // Determine display amounts based on toggle
+  const primaryCents = showConverted ? expense.amountCents : expense.originalAmountCents;
+  const primaryCurrency = showConverted ? group.currency : expense.originalCurrency;
+  const showSecondary = expense.originalCurrency !== group.currency;
+  const secondaryCents = showConverted ? expense.originalAmountCents : expense.amountCents;
+  const secondaryCurrency = showConverted ? expense.originalCurrency : group.currency;
+
+  // Share calculation always uses converted cents (splits are stored in group currency)
   const share = Math.round(expense.amountCents / group.members.length);
   const youPaid = expense.paidByUserId === currentUserId;
-  const userShare = youPaid ? expense.amountCents - share : share;
+  const userShareCents = youPaid ? expense.amountCents - share : share;
   const cls = youPaid ? 'text-success' : 'text-danger';
   const shareLabel = youPaid
-    ? t('expense.item.youGet', { amount: formatEuro(userShare) })
-    : t('expense.item.youOwe', { amount: formatEuro(userShare) });
+    ? t('expense.item.youGet', { amount: formatCurrency(userShareCents, group.currency) })
+    : t('expense.item.youOwe', { amount: formatCurrency(userShareCents, group.currency) });
 
   const dateObj = new Date(expense.date);
   const month = dateObj.toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US', { month: 'short' });
@@ -62,7 +71,17 @@ export function ExpenseItem({ expense, group, onDeleted }: ExpenseItemProps) {
         <span className="expense-payer">{payerLabel}</span>
       </div>
       <div className={`expense-amount-box ${cls}`}>
-        <span className="amount-total">{formatEuro(expense.amountCents)}</span>
+        <span className="amount-total">{formatCurrency(primaryCents, primaryCurrency)}</span>
+        {showSecondary && (
+          <span className="text-xs text-muted-foreground font-normal">
+            {formatCurrency(secondaryCents, secondaryCurrency)}
+          </span>
+        )}
+        {expense.appliedMarkupRate > 0 && (
+          <span className="text-xs text-muted-foreground font-normal">
+            {t('expense.form.markupHint', { rate: expense.appliedMarkupRate })}
+          </span>
+        )}
         <span className="amount-share">{shareLabel}</span>
       </div>
       <div className="flex items-center opacity-40 hover:opacity-100 transition-opacity ml-2 shrink-0">

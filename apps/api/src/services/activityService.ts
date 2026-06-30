@@ -8,7 +8,9 @@ export type ActivityType =
   | 'member_added'
   | 'member_invited'
   | 'member_joined'
-  | 'settlement_recorded';
+  | 'settlement_recorded'
+  | 'settlement_edited'
+  | 'settlement_deleted';
 
 export function logActivity(
   groupId: string,

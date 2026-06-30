@@ -72,20 +72,35 @@ async function main() {
     {
       description: 'Hüttenmiete',
       amountCents: 48000,
+      originalAmountCents: 48000,
+      originalCurrency: 'EUR',
       paidByUserId: demo.id,
       date: new Date('2026-03-20'),
     },
     {
       description: 'Skipass Tag 1',
       amountCents: 20000,
+      originalAmountCents: 20000,
+      originalCurrency: 'EUR',
       paidByUserId: anna.id,
       date: new Date('2026-03-21'),
     },
     {
       description: 'Apres-Ski Runde',
       amountCents: 7600,
+      originalAmountCents: 7600,
+      originalCurrency: 'EUR',
       paidByUserId: ben.id,
       date: new Date('2026-03-21'),
+    },
+    {
+      // USD expense to demo multi-currency: $54 USD ≈ €50 EUR at 0.926 rate
+      description: 'Ski-Ausrüstung (USD)',
+      amountCents: 5000,
+      originalAmountCents: 5400,
+      originalCurrency: 'USD',
+      paidByUserId: demo.id,
+      date: new Date('2026-03-22'),
     },
   ];
 
@@ -96,6 +111,8 @@ async function main() {
         groupId: group.id,
         description: exp.description,
         amountCents: exp.amountCents,
+        originalAmountCents: exp.originalAmountCents,
+        originalCurrency: exp.originalCurrency,
         paidByUserId: exp.paidByUserId,
         date: exp.date,
         splitMode: 'equal',

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import type { Route } from './+types/groups.$groupId_.expenses.$expenseId.edit';
 import { requireAuth } from '../lib/requireAuth';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/apiClient';
 import { AddExpenseForm } from '../components/expense/AddExpenseForm';
 import type { Expense, Group, NewExpenseInput } from '../types';
@@ -10,11 +11,10 @@ import type { Expense, Group, NewExpenseInput } from '../types';
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   await requireAuth();
 
-  const group = await api.get<Group>(`/api/groups/${params.groupId}`);
-  const expenses = await api.get<Expense[]>(`/api/groups/${params.groupId}/expenses`);
-  const expense = expenses.find((e) => e.id === params.expenseId);
-
-  if (!expense) throw new Response('Not Found', { status: 404 });
+  const [group, expense] = await Promise.all([
+    api.get<Group>(`/api/groups/${params.groupId}`),
+    api.get<Expense>(`/api/groups/${params.groupId}/expenses/${params.expenseId}`),
+  ]);
 
   return { group, expense };
 }
@@ -22,6 +22,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
   const { group, expense } = loaderData;
   const { t } = useLanguage();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +35,8 @@ export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
       await api.put<Expense>(`/api/groups/${group.id}/expenses/${expense.id}`, {
         description: input.description,
         amountCents: input.amountCents,
+        currency: input.currency,
+        markupRate: input.markupRate,
         paidByUserId: input.paidByUserId,
         date: input.date,
         splitMode: input.splitMode,
@@ -69,11 +72,15 @@ export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
       defaults={{
         description: expense.description,
         amountCents: expense.amountCents,
+        originalAmountCents: expense.originalAmountCents,
+        originalCurrency: expense.originalCurrency,
+        appliedMarkupRate: expense.appliedMarkupRate,
         paidByUserId: expense.paidByUserId,
         splitMode: expense.splitMode,
         date: expense.date,
         splits: expense.splits,
       }}
+      defaultMarkupRate={user?.defaultMarkupRate ?? 0}
     />
   );
 }

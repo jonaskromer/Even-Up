@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { requireGroupMember } from '../middleware/requireGroupMember.js';
 import { logActivity } from '../services/activityService.js';
 import { computeAndValidateSplits } from '../services/computeSplits.js';
+import { getRate } from '../services/exchangeRateService.js';
 import { HttpError } from '../lib/HttpError.js';
 
 function formatExpense(e: {
@@ -13,6 +14,9 @@ function formatExpense(e: {
   groupId: string;
   description: string;
   amountCents: number;
+  originalAmountCents: number;
+  originalCurrency: string;
+  appliedMarkupRate: number;
   paidByUserId: string;
   paidBy: { id: string; name: string };
   date: Date;
@@ -25,6 +29,9 @@ function formatExpense(e: {
     groupId: e.groupId,
     description: e.description,
     amountCents: e.amountCents,
+    originalAmountCents: e.originalAmountCents,
+    originalCurrency: e.originalCurrency,
+    appliedMarkupRate: e.appliedMarkupRate,
     paidByUserId: e.paidByUserId,
     paidByName: e.paidBy.name,
     date: e.date.toISOString().slice(0, 10),
@@ -41,6 +48,17 @@ const pageSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+async function resolveConvertedAmount(
+  originalAmountCents: number,
+  originalCurrency: string,
+  groupCurrency: string,
+  dateStr: string,
+): Promise<number> {
+  if (originalCurrency === groupCurrency) return originalAmountCents;
+  const rate = await getRate(dateStr, originalCurrency, groupCurrency);
+  return Math.round(originalAmountCents * rate);
+}
 
 export async function expensesRoutes(app: FastifyInstance) {
   app.get(
@@ -68,6 +86,25 @@ export async function expensesRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get(
+    '/groups/:groupId/expenses/:expenseId',
+    { preHandler: [requireAuth, requireGroupMember] },
+    async (req) => {
+      const { groupId, expenseId } = req.params as { groupId: string; expenseId: string };
+
+      const expense = await prisma.expense.findUnique({
+        where: { id: expenseId, groupId },
+        include: {
+          paidBy: { select: { id: true, name: true } },
+          splits: true,
+        },
+      });
+
+      if (!expense) throw new HttpError(404, 'Ausgabe nicht gefunden.');
+      return formatExpense(expense);
+    },
+  );
+
   app.post(
     '/groups/:groupId/expenses',
     { preHandler: [requireAuth, requireGroupMember] },
@@ -75,15 +112,48 @@ export async function expensesRoutes(app: FastifyInstance) {
       const body = createExpenseSchema.parse(req.body);
       const { groupId } = req.params as { groupId: string };
 
+      const group = await prisma.group.findUniqueOrThrow({
+        where: { id: groupId },
+        select: { currency: true },
+      });
+
+      const originalCurrency = (body.currency ?? group.currency).toUpperCase();
+      const dateStr = body.date.slice(0, 10);
+      const convertedAmountCents = await resolveConvertedAmount(
+        body.amountCents,
+        originalCurrency,
+        group.currency,
+        dateStr,
+      );
+
+      const markupRate = body.markupRate ?? 0;
+      const markupFactor = 1 + markupRate / 100;
+      const finalAmountCents = Math.round(convertedAmountCents * markupFactor);
+
       const members = await prisma.groupMember.findMany({
         where: { groupId },
         select: { userId: true },
       });
 
+      // For exact splits in a foreign currency, convert each owed amount too
+      let convertedExactSplits = body.exactSplits;
+      if (body.exactSplits && originalCurrency !== group.currency) {
+        const rate = await getRate(dateStr, originalCurrency, group.currency);
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * rate * markupFactor),
+        }));
+      } else if (body.exactSplits && markupRate > 0) {
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * markupFactor),
+        }));
+      }
+
       const splitData = computeAndValidateSplits(
         body.splitMode,
-        body.amountCents,
-        body.exactSplits,
+        finalAmountCents,
+        convertedExactSplits,
         members.map((m) => m.userId),
       );
 
@@ -91,7 +161,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         data: {
           groupId,
           description: body.description,
-          amountCents: body.amountCents,
+          amountCents: finalAmountCents,
+          originalAmountCents: body.amountCents,
+          originalCurrency,
+          appliedMarkupRate: markupRate,
           paidByUserId: body.paidByUserId,
           date: new Date(body.date),
           splitMode: body.splitMode,
@@ -137,15 +210,47 @@ export async function expensesRoutes(app: FastifyInstance) {
         );
       }
 
+      const group = await prisma.group.findUniqueOrThrow({
+        where: { id: groupId },
+        select: { currency: true },
+      });
+
+      const originalCurrency = (body.currency ?? group.currency).toUpperCase();
+      const dateStr = body.date.slice(0, 10);
+      const convertedAmountCents = await resolveConvertedAmount(
+        body.amountCents,
+        originalCurrency,
+        group.currency,
+        dateStr,
+      );
+
+      const markupRate = body.markupRate ?? 0;
+      const markupFactor = 1 + markupRate / 100;
+      const finalAmountCents = Math.round(convertedAmountCents * markupFactor);
+
       const members = await prisma.groupMember.findMany({
         where: { groupId },
         select: { userId: true },
       });
 
+      let convertedExactSplits = body.exactSplits;
+      if (body.exactSplits && originalCurrency !== group.currency) {
+        const rate = await getRate(dateStr, originalCurrency, group.currency);
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * rate * markupFactor),
+        }));
+      } else if (body.exactSplits && markupRate > 0) {
+        convertedExactSplits = body.exactSplits.map((s) => ({
+          userId: s.userId,
+          owedCents: Math.round(s.owedCents * markupFactor),
+        }));
+      }
+
       const splitData = computeAndValidateSplits(
         body.splitMode,
-        body.amountCents,
-        body.exactSplits,
+        finalAmountCents,
+        convertedExactSplits,
         members.map((m) => m.userId),
       );
 
@@ -155,7 +260,10 @@ export async function expensesRoutes(app: FastifyInstance) {
         where: { id: expenseId },
         data: {
           description: body.description,
-          amountCents: body.amountCents,
+          amountCents: finalAmountCents,
+          originalAmountCents: body.amountCents,
+          originalCurrency,
+          appliedMarkupRate: markupRate,
           paidByUserId: body.paidByUserId,
           date: new Date(body.date),
           splitMode: body.splitMode,
