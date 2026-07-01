@@ -520,6 +520,10 @@ The primary model is retried up to 3 times with a random jitter delay before fal
 back to the secondary model once; both model names are configurable so either can be
 bumped without a code change. See [ADR 012](docs/adr/012-receipt-ai-parsing.md).
 
+The production nginx config (`apps/web/nginx.conf`) already raises the default 1MB
+upload limit, proxy timeouts, and disables response buffering on `/api/` specifically
+for this feature — no extra config needed on your part unless you've customized that file.
+
 ### Logs
 
 The API uses Fastify's built-in logger (pino), enabled in development and production but disabled during tests (`NODE_ENV=test`) to keep test output clean. Each request produces two JSON lines — `incoming request` and `request completed` (with status code and response time):

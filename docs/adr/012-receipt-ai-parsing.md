@@ -92,6 +92,15 @@ scopes the larger size limit to just the upload route; the handler reads the str
 into a buffer, base64-encodes only in memory for the single outbound Gemini call, and
 discards it immediately after.
 
+**Production requires matching nginx settings on the `/api/` proxy location**
+(`apps/web/nginx.conf`), since the request passes through nginx before reaching
+Fastify: `client_max_body_size 11m` (nginx defaults to 1MB — a photo upload would
+otherwise get a `413` from nginx itself, before the API's own 10MB check ever runs),
+`proxy_read_timeout`/`proxy_send_timeout 300s` (nginx's 60s default would `504` a slow
+retry-then-fallback sequence that's still succeeding), and `proxy_buffering off` (nginx
+buffers the full proxied response by default, which would hold back the NDJSON
+progress events until the request completes, silently defeating the live retry UI).
+
 ### Normalized `ReceiptLineItem` / `ReceiptLineItemAssignment` tables, not JSON
 
 Line items must be re-editable later (the "Edit line items" flow), which rules out
