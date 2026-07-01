@@ -11,7 +11,22 @@ export interface Group {
   id: string;
   name: string;
   currency: string;
+  receiptsEnabled?: boolean;
   members: Member[];
+}
+
+export interface ReceiptLineItemAssignment {
+  userId: string;
+  weight: number;
+}
+
+export interface ReceiptLineItem {
+  id: string;
+  name: string;
+  quantity: number;
+  priceCents: number;
+  excluded: boolean;
+  assignments: ReceiptLineItemAssignment[];
 }
 
 export interface Expense {
@@ -28,6 +43,33 @@ export interface Expense {
   updatedAt: string;
   splitMode: SplitMode;
   splits?: { userId: string; owedCents: number }[];
+  receiptStoreName?: string;
+  lineItems?: ReceiptLineItem[];
+}
+
+export interface ParsedReceipt {
+  storeName: string;
+  date?: string;
+  lineItems: { name: string; quantity: number; priceCents: number }[];
+  subtotalCents?: number;
+  grandTotalCents: number;
+}
+
+export interface ReceiptDraftLineItem {
+  name: string;
+  quantity: number;
+  priceCents: number;
+  excluded: boolean;
+  assignments: ReceiptLineItemAssignment[];
+}
+
+export interface ReceiptExpenseInput {
+  storeName: string;
+  paidByUserId: string;
+  date: string;
+  currency?: string;
+  markupRate?: number;
+  lineItems: ReceiptDraftLineItem[];
 }
 
 export interface Balance {
