@@ -17,9 +17,14 @@ const DEMO_USER_IDS = {
 };
 
 async function main() {
+  // Upsert by the fixed id (the actual idempotency key — see comment above), not by
+  // email. A database seeded before an email/domain rename would otherwise have an
+  // existing row at this id with the *old* email; upserting by email would then not
+  // find that row and try to create a new one with the same id, hitting a unique
+  // constraint violation on `id` instead of updating the row in place.
   const demo = await prisma.user.upsert({
-    where: { email: 'demo@even-up.local' },
-    update: {},
+    where: { id: DEMO_USER_IDS.demo },
+    update: { email: 'demo@even-up.local', name: 'Demo User' },
     create: {
       id: DEMO_USER_IDS.demo,
       email: 'demo@even-up.local',
@@ -28,8 +33,8 @@ async function main() {
   });
 
   const anna = await prisma.user.upsert({
-    where: { email: 'anna@even-up.local' },
-    update: {},
+    where: { id: DEMO_USER_IDS.anna },
+    update: { email: 'anna@even-up.local', name: 'Anna' },
     create: {
       id: DEMO_USER_IDS.anna,
       email: 'anna@even-up.local',
@@ -38,8 +43,8 @@ async function main() {
   });
 
   const ben = await prisma.user.upsert({
-    where: { email: 'ben@even-up.local' },
-    update: {},
+    where: { id: DEMO_USER_IDS.ben },
+    update: { email: 'ben@even-up.local', name: 'Ben' },
     create: {
       id: DEMO_USER_IDS.ben,
       email: 'ben@even-up.local',
