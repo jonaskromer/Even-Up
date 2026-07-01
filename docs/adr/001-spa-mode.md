@@ -19,7 +19,7 @@ Use **SPA mode**.
 
 ## Rationale
 
-- **Every view is authenticated.** EvenUp requires login before any meaningful content is shown. There is no public-facing content that benefits from server-side rendering or SEO indexing.
+- **Every view is authenticated.** Even-Up requires login before any meaningful content is shown. There is no public-facing content that benefits from server-side rendering or SEO indexing.
 - **Fastify API is already built and tested.** 26 integration and unit tests cover auth, expenses, settlements, balances, debt simplification, and group join requests. SSR mode would require either replacing Fastify with React Router's server or proxying between them — added complexity for no user-facing benefit.
 - **Simpler deployment.** SPA mode produces a static build (`build/client/`) served by nginx or any CDN. The API deploys independently. No Node.js server needed for the frontend in production.
 - **Shared Zod schemas work the same way.** Client-side Loaders and Actions can import from `@evenup/shared` and validate forms before sending requests to the API. No server-side rendering needed for this.

@@ -2,7 +2,7 @@
 
 ## System Architecture
 
-EvenUp follows a **client-server SPA architecture** with a clear separation between the React frontend and the Fastify REST API. Both communicate exclusively via JSON over HTTP.
+Even-Up follows a **client-server SPA architecture** with a clear separation between the React frontend and the Fastify REST API. Both communicate exclusively via JSON over HTTP.
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -40,7 +40,7 @@ EvenUp follows a **client-server SPA architecture** with a clear separation betw
 ┌────────────────────▼────────────────────────────┐
 │              PostgreSQL 16                      │
 │                                                 │
-│  9 tables, integer cents for all monetary vals  │
+│  10 tables, integer cents for all monetary vals │
 │  Cascade deletes on group → expenses/members/   │
 │  join-requests                                  │
 │  (credentials live in Supabase's own auth.users, │
@@ -57,10 +57,12 @@ React Router v8 in SPA mode with `@react-router/fs-routes` for file-based route 
 ```
 routes/
 ├── _index.tsx                                     # / (dashboard)
-├── login.tsx                                      # /login (Supabase signInWithPassword)
-├── register.tsx                                   # /register (Supabase signUp)
-├── forgot-password.tsx                            # /forgot-password (Supabase resetPasswordForEmail)
-├── reset-password.tsx                             # /reset-password (Supabase updateUser)
+├── login.tsx                                      # /login (email/password + Google + passkey)
+├── register.tsx                                   # /register
+├── forgot-password.tsx                            # /forgot-password (POST /api/auth/forgot-password)
+├── reset-password.tsx                             # /reset-password (client-side Supabase exchange, see ADR 005)
+├── auth.callback.tsx                              # /auth/callback (fallback landing for client-side OAuth redirects)
+├── settings.tsx                                   # /settings (profile, currency, markup rate, password, passkeys, delete account)
 ├── groups.new.tsx                                 # /groups/new
 ├── groups.$groupId.tsx                            # /groups/:groupId
 ├── groups.$groupId_.new-expense.tsx               # /groups/:groupId/new-expense
@@ -140,18 +142,21 @@ root.tsx
 ├── <Outlet /> (active route)
 │   ├── _index → SiteHeader + Dashboard
 │   │             │            ├── BalanceBanner
-│   │             │            └── GroupList → GroupCard[]
+│   │             │            ├── GroupList → GroupCard[]
+│   │             │            └── GlobalActivityFeed (cross-group, load-more paginated)
 │   │             └── PendingInvitationsBell (consumes PendingInvitesContext)
 │   ├── groups.$groupId → GroupDetail (own inline header, not SiteHeader)
 │   │                       ├── PendingInvitationsBell (in GroupDetail's own header)
 │   │                       ├── ExpenseFeed → ExpenseItem[] + ImportExpensesButton
 │   │                       ├── BalancesPanel
-│   │                       ├── SettleUpPanel
+│   │                       ├── SettleUpPanel → SettlementItem[] (inline edit/delete)
 │   │                       ├── MembersPanel + InviteLinkButton + AddMemberForm
 │   │                       │              (+ pending outgoing invites section)
 │   │                       └── ActivityLog
 │   ├── groups.$groupId_.new-expense → AddExpenseForm
 │   ├── groups.$groupId_.expenses.$expenseId.edit → AddExpenseForm (with defaults)
+│   ├── login / register → OAuthButtons (Google + passkey) + credentials form
+│   ├── settings → Currency, Markup Rate, Language, Password, Passkeys, Account sections
 │   └── invite.$token → (auto-accept invite)
 └── SiteFooter
 ```
@@ -298,13 +303,13 @@ The API tests use Fastify's `app.inject()` method for in-process HTTP testing �
 
 | Suite                        | Tests | What it verifies                                                                                                                                                                   |
 | ---------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth.test.ts`               | 9     | GET /me (bearer + cookie), DELETE /me, lazy `User` upsert on first request, PATCH /me (name, preferredCurrency, validation)                                                        |
+| `auth.test.ts`               | 12    | GET /me (bearer + cookie), DELETE /me, lazy `User` upsert (incl. no duplicate on 2nd request), PATCH /me (name, preferredCurrency, invalid currency, no-fields validation)          |
 | `balance.test.ts`            | 3     | Net sum = 0 invariant, payer credited correctly, cent rounding                                                                                                                     |
-| `computeSplits.test.ts`      | 8     | Equal mode ignores client splits, exact/percent/shares validation, rounding tolerance, outsider/duplicate userId rejected                                                           |
+| `computeSplits.test.ts`      | 10    | Equal mode ignores client splits, exact/percent/shares validation, rounding tolerance, outsider/duplicate userId rejected, sum-too-high/too-low rejected                            |
 | `debtSimplification.test.ts` | 6     | Fewer transfers than naive, net balances preserved, edge cases (zero balance, single debtor, 4+ people)                                                                            |
 | `exchangeRate.test.ts`       | 5     | Same currency → 1, DB cache hit, Frankfurter v2 fetch + upsert, v1 fallback when v2 fails, 503 when both fail                                                                     |
 | `expenses.test.ts`           | 11    | POST (401, create with original fields, exactSplits, markupRate applied), PUT (update splits, 409 stale conflict), GET single (401, fields, 404), DELETE (401, removes expense)    |
-| `groups.test.ts`             | 7     | GET /groups (401, array), POST (creator as owner, currency field, defaults EUR, inherits preferredCurrency), GET /:id (member + non-member), GET /:id/balances                    |
+| `groups.test.ts`             | 9     | GET /groups (401, array), POST (creator as owner, currency field, defaults EUR, inherits preferredCurrency after PATCH /me), GET /:id (member + non-member), GET /:id/balances     |
 | `joinRequests.test.ts`       | 7     | Invite creates pending request, duplicate/self-invite rejected, accept/decline, wrong-user accept → 403, re-invite after accept → 409                                              |
 | `settlements.test.ts`        | 4     | Record settlement → 201, 401 without auth, settle-up suggestions, balance zeroed after settlement                                                                                 |
 

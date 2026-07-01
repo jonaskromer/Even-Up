@@ -221,6 +221,10 @@ Update display name, language preference, and/or preferred currency. Also syncs 
 { "user": { "id": "9f2b...", "email": "max@example.com", "name": "Max M.", "defaultMarkupRate": 1.5 } }
 ```
 
+Returned only if the request updated at least one field stored on the local `User` row
+(`name`, `preferredCurrency`, `defaultMarkupRate`). A request that only sets `lang`
+(synced to Supabase `user_metadata`, not stored locally) returns **`204`** with no body.
+
 ---
 
 ### POST `/api/auth/change-password`
@@ -274,8 +278,8 @@ List all groups the authenticated user is a member of.
     "name": "Ski Trip 2026",
     "currency": "EUR",
     "members": [
-      { "id": "clx...", "name": "Demo User", "email": "demo@evenup.local", "role": "owner" },
-      { "id": "clx...", "name": "Anna", "email": "anna@evenup.local", "role": "member" }
+      { "id": "clx...", "name": "Demo User", "email": "demo@even-up.local", "role": "owner" },
+      { "id": "clx...", "name": "Anna", "email": "anna@even-up.local", "role": "member" }
     ]
   }
 ]
@@ -310,7 +314,7 @@ user must accept (see [Join Requests](#join-requests) below) before becoming a m
 **Request body:**
 
 ```json
-{ "email": "anna@evenup.local" }
+{ "email": "anna@even-up.local" }
 ```
 
 **Response `201`:**
@@ -362,7 +366,7 @@ List pending outgoing invites for a group (requires group membership). Used by t
   {
     "id": "clx...",
     "invitedName": "Anna",
-    "invitedEmail": "anna@evenup.local",
+    "invitedEmail": "anna@even-up.local",
     "createdAt": "2026-06-01T10:00:00.000Z"
   }
 ]
@@ -517,6 +521,12 @@ Delete an expense and its associated splits.
 
 ## Settlements
 
+### GET `/api/groups/:id/settlements`
+
+List all recorded settlements for the group, ordered by date descending.
+
+**Response `200`:** Array of settlement objects (same shape as the POST response below)
+
 ### GET `/api/groups/:id/settle-up?simplify=true`
 
 Get suggested transfers to settle all debts. The `simplify` parameter (default `true`) enables the greedy min-cash-flow algorithm to reduce the number of transfers.
@@ -554,13 +564,32 @@ Record a payment between two members.
   "groupId": "clx...",
   "fromUserId": "clx...",
   "toUserId": "clx...",
+  "fromUserName": "Anna",
+  "toUserName": "Demo User",
   "amountCents": 800,
-  "date": "2026-05-03T00:00:00.000Z",
+  "date": "2026-05-03",
   "note": "Bar bezahlt",
-  "fromUser": { "id": "clx...", "name": "Anna" },
-  "toUser": { "id": "clx...", "name": "Demo User" }
+  "createdAt": "2026-05-03T12:00:00.000Z"
 }
 ```
+
+### PUT `/api/groups/:id/settlements/:settlementId`
+
+Update an existing settlement (amount, date, note, or the two parties).
+
+**Request body:** Same as POST
+
+**Response `200`:** Updated settlement object
+
+**Errors:** `404` settlement not found in this group
+
+### DELETE `/api/groups/:id/settlements/:settlementId`
+
+Delete a settlement.
+
+**Response `204`:** No content
+
+**Errors:** `404` settlement not found in this group
 
 ---
 
@@ -603,9 +632,41 @@ Accept an invite and join the group. Requires authentication (but not group memb
 
 ## Activities
 
-All activity endpoints require authentication and group membership.
+### GET `/api/activities`
+
+List activity events across **all** groups the authenticated user is a member of,
+newest first — powers the dashboard's global activity feed. Requires authentication
+only (no group membership check needed, since it's scoped to the caller's own
+memberships). Supports the same offset-based pagination as the per-group endpoint
+below.
+
+**Query parameters:** Same as `/api/groups/:groupId/activities` below.
+
+**Response `200`:**
+
+```json
+{
+  "items": [
+    {
+      "id": "clx...",
+      "groupId": "clx...",
+      "groupName": "Ski Trip 2026",
+      "type": "expense_created",
+      "actorName": "Demo User",
+      "data": { "description": "Abendessen", "amountCents": 4500 },
+      "createdAt": "2026-05-24T17:30:00.000Z"
+    }
+  ],
+  "total": 87
+}
+```
+
+Note the extra `groupName` field (absent from the per-group endpoint below, since there
+it's implied by the URL).
 
 ### GET `/api/groups/:groupId/activities`
+
+Requires authentication and group membership.
 
 List activity events for the group, ordered newest first. Supports offset-based pagination.
 
@@ -636,7 +697,7 @@ List activity events for the group, ordered newest first. Supports offset-based 
 `total` is the total event count for the group. The frontend shows a "X of Y" counter and a
 "Load more" button when `total > items shown`.
 
-**Event types:** `expense_created`, `expense_edited`, `expense_deleted`, `settlement_recorded`, `member_added`, `member_invited`, `member_joined`
+**Event types:** `expense_created`, `expense_edited`, `expense_deleted`, `settlement_recorded`, `settlement_edited`, `settlement_deleted`, `member_invited`, `member_joined`
 
 ---
 

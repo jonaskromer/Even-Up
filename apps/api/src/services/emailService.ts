@@ -50,7 +50,7 @@ function renderEmail(opts: { bodyHtml: string; ctaLabel?: string; ctaUrl?: strin
             <tr>
               <td style="padding: 24px 32px; border-bottom: 1px solid ${COLORS.border};">
                 <span style="font-size: 20px; font-weight: 800; color: ${COLORS.foreground};">
-                  <span style="color: ${COLORS.accent};">+</span> EvenUp
+                  <span style="color: ${COLORS.accent};">+</span> Even-Up
                 </span>
               </td>
             </tr>
@@ -63,7 +63,7 @@ function renderEmail(opts: { bodyHtml: string; ctaLabel?: string; ctaUrl?: strin
             <tr>
               <td style="padding: 16px 32px 24px; border-top: 1px solid ${COLORS.border};">
                 <p style="margin: 0; font-size: 12px; color: ${COLORS.mutedForeground};">
-                  EvenUp — Gemeinsame Ausgaben einfach aufteilen
+                  Even-Up — Gemeinsame Ausgaben einfach aufteilen
                 </p>
               </td>
             </tr>
@@ -84,13 +84,13 @@ export async function sendJoinRequestEmail(
   const loginUrl = `${env.APP_URL ?? ''}/login`;
 
   const { error } = await resend.emails.send({
-    from: env.EMAIL_FROM ?? 'EvenUp <onboarding@resend.dev>',
+    from: env.EMAIL_FROM ?? 'Even-Up <onboarding@resend.dev>',
     to,
-    subject: `Einladung zur Gruppe „${groupName}“ — EvenUp`,
+    subject: `Einladung zur Gruppe „${groupName}“ — Even-Up`,
     html: renderEmail({
       bodyHtml: `
         <p style="margin: 0 0 12px;">Hallo,</p>
-        <p style="margin: 0;"><strong>${inviterName}</strong> hat dich zur Gruppe „${groupName}“ auf EvenUp eingeladen. Melde dich an, um die Einladung anzunehmen oder abzulehnen.</p>
+        <p style="margin: 0;"><strong>${inviterName}</strong> hat dich zur Gruppe „${groupName}“ auf Even-Up eingeladen. Melde dich an, um die Einladung anzunehmen oder abzulehnen.</p>
       `,
       ctaLabel: 'Einladung ansehen',
       ctaUrl: loginUrl,
@@ -113,9 +113,9 @@ export async function sendJoinRequestAcceptedEmail(
   const groupUrl = `${env.APP_URL ?? ''}/groups/${groupId}`;
 
   const { error } = await resend.emails.send({
-    from: env.EMAIL_FROM ?? 'EvenUp <onboarding@resend.dev>',
+    from: env.EMAIL_FROM ?? 'Even-Up <onboarding@resend.dev>',
     to,
-    subject: `${accepterName} ist „${groupName}“ beigetreten — EvenUp`,
+    subject: `${accepterName} ist „${groupName}“ beigetreten — Even-Up`,
     html: renderEmail({
       bodyHtml: `
         <p style="margin: 0 0 12px;">Hallo,</p>

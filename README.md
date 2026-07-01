@@ -1,6 +1,6 @@
-# EvenUp
+# Even-Up
 
-A web application for splitting expenses fairly among groups. Create groups for your flatshare, trips, or events, log shared expenses, and let EvenUp calculate who owes whom — with optional debt simplification to minimize the number of transfers.
+A web application for splitting expenses fairly among groups. Create groups for your flatshare, trips, or events, log shared expenses, and let Even-Up calculate who owes whom — with optional debt simplification to minimize the number of transfers.
 
 ---
 
@@ -33,16 +33,25 @@ A web application for splitting expenses fairly among groups. Create groups for 
 ### Balances & Settlements
 
 - Real-time net balance per person within each group
-- "Settle up" flow to record payments
+- "Settle up" flow to record payments, with edit and delete for previously recorded settlements
 - **Debt simplification** — reduces the number of required transfers without changing anyone's net balance (min-cash-flow algorithm)
 
 ### Authentication & Account
 
-- Email/password registration and login via **Supabase Auth** (Cloud) — the frontend
-  talks to Supabase directly; the API verifies the Supabase-issued JWT per request
+- Email/password registration and login handled entirely by the Fastify **BFF**
+  (Backend-for-Frontend) — the browser only ever holds `HttpOnly` session cookies
+  (`sb_access` 1h, `sb_refresh` 30d), never a token in JavaScript; the BFF talks to
+  Supabase Auth's REST API directly and transparently refreshes an expired access
+  token using the refresh cookie — see [ADR 005](docs/adr/005-bff-session-management.md)
+- **Google sign-in** via server-side PKCE OAuth (`/api/auth/google` → Supabase → Google
+  → `/api/auth/callback`) — the browser only follows redirects, never sees a token
+- **Passkey (WebAuthn)** sign-in and registration via `supabase-js`, configured with
+  `persistSession: false` so it never touches `localStorage`
 - Local `User` row is lazily provisioned (`upsert`) on the first authenticated request
   for a given Supabase user — no signup webhook needed
 - Protected routes on both client (loader-level redirect) and server (Fastify preHandler)
+- Change password and delete account (with a guard against deleting a user who has
+  shared financial records other members depend on)
 - Password reset and signup-confirmation emails are sent by Supabase itself, routed
   through the app's existing Resend account (custom SMTP) with branded templates — see
   [ADR 004](docs/adr/004-supabase-auth.md)
@@ -51,7 +60,8 @@ A web application for splitting expenses fairly among groups. Create groups for 
 
 - Dark mode (system preference detected on load, manual toggle persisted to localStorage)
 - CSV import for bulk expense entry (column-based, name matching, preview before import)
-- Activity log per group with load-more pagination (expenses added/edited/deleted, settlements, members joined)
+- Activity log per group with load-more pagination (expenses added/edited/deleted, settlements recorded/edited/deleted, members invited/joined)
+- Global activity feed on the dashboard aggregating events across all of the user's groups
 - Load-more pagination for expense lists and activity logs — first 20 items shown, more loaded on demand
 - Member email shown alongside name in balances and member panels to disambiguate same-name users
 
@@ -67,11 +77,11 @@ A web application for splitting expenses fairly among groups. Create groups for 
 | **Build**               | Vite                                                                                          |
 | **API**                 | Fastify (REST)                                                                                |
 | **Validation**          | Zod (shared schemas between client and server)                                                |
-| **Auth**                | Supabase Auth (Cloud) — JWT verified server-side via `jose`/JWKS                              |
+| **Auth**                | Supabase Auth (Cloud) via a Fastify BFF — HttpOnly cookie sessions, JWT verified server-side via `jose`/JWKS, server-side PKCE for Google OAuth |
 | **Database**            | PostgreSQL 16 + Prisma 7 ORM (`@prisma/adapter-pg`)                                           |
 | **Email**               | Resend (join-request emails; Supabase's auth emails are SMTP-routed through the same account) |
 | **Reverse Proxy / TLS** | Caddy (automatic Let's Encrypt HTTPS in production)                                           |
-| **Testing**             | Vitest, React Testing Library, Fastify `app.inject()`                                         |
+| **Testing**             | Vitest, React Testing Library, Fastify `app.inject()`, Playwright (E2E, mocked auth)           |
 | **Tooling**             | npm workspaces, ESLint, Prettier, Husky + lint-staged, GitHub Actions CI, Make                |
 
 ---
@@ -85,12 +95,18 @@ A web application for splitting expenses fairly among groups. Create groups for 
 |  Tailwind CSS / shadcn/ui / Zod          |
 +----------------+-------------------------+
                  |
-                 |  HTTP/JSON (HttpOnly cookies)
+                 |  HTTP/JSON (HttpOnly cookie session — no
+                 |  token ever reaches JavaScript)
                  v
 +----------------+-------------------------+
-|           Fastify REST API               |
+|        Fastify REST API (BFF)            |
+|  Owns the session: login/register/logout,|
+|   Google OAuth (server-side PKCE), token |
+|   refresh all call Supabase Auth's REST  |
+|   API directly                           |
 |  Zod request validation (shared schemas) |
-|  requireAuth: verifies Supabase JWT,     |
+|  requireAuth: verifies Supabase JWT      |
+|   (cookie-first), auto-refreshes,        |
 |   lazily upserts local User row          |
 |  Route modules: auth, groups, expenses,  |
 |   settlements, invites, activities,      |
@@ -111,7 +127,7 @@ A web application for splitting expenses fairly among groups. Create groups for 
 
 ### Why SPA over SSR?
 
-EvenUp is a fully authenticated, interactive application. Every view depends on the logged-in user's data. Server-side rendering adds complexity without SEO benefit here. A client-side SPA with Supabase Auth and Fastify as a dedicated API layer is the simplest architecture that fits the problem. See [ADR 001](docs/adr/001-spa-mode.md) for full rationale.
+Even-Up is a fully authenticated, interactive application. Every view depends on the logged-in user's data. Server-side rendering adds complexity without SEO benefit here. A client-side SPA with Supabase Auth and Fastify as a dedicated API layer is the simplest architecture that fits the problem. See [ADR 001](docs/adr/001-spa-mode.md) for full rationale.
 
 ### Shared Validation
 
@@ -219,6 +235,8 @@ resulting JWT (`requireAuth`) and exposes:
 │   │   │   │   ├── register.tsx         # /register
 │   │   │   │   ├── forgot-password.tsx  # /forgot-password
 │   │   │   │   ├── reset-password.tsx   # /reset-password?token=…
+│   │   │   │   ├── auth.callback.tsx    # /auth/callback (Google OAuth landing)
+│   │   │   │   ├── settings.tsx         # /settings (profile, currency, markup, password, account deletion)
 │   │   │   │   ├── groups.new.tsx       # /groups/new
 │   │   │   │   ├── groups.$groupId.tsx  # /groups/:id
 │   │   │   │   ├── groups.$groupId_.new-expense.tsx
@@ -263,7 +281,8 @@ resulting JWT (`requireAuth`) and exposes:
 │   │   │   │                  #            ExchangeRate)
 │   │   │   └── seed.ts
 │   │   └── prisma.config.ts   # Prisma 7 config (datasource URL for migrations)
-│   └── web-static/             # M1 HTML/CSS prototype (archive)
+│   ├── web-static/             # M1 HTML/CSS prototype (archive)
+│   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/auth/me
 ├── packages/
 │   └── shared/                 # Zod schemas (group, expense, settlement)
 ├── docs/
@@ -346,17 +365,15 @@ npm run dev                     # Vite on http://localhost:5173
 
 | Email               | Password            | Group                                |
 | ------------------- |---------------------|--------------------------------------|
-| `demo@evenup.local` | demo                | Ski Trip 2026 (with anna, ben) |
+| `demo@even-up.local` | demo                | Ski Trip 2026 (with anna, ben) |
 
 ### Running Tests
 
 ```bash
-# All tests from repo root
-npm test
-
-# Or individually
-cd apps/api && npm test         # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (67 tests)
-cd apps/web && npm test         # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (43 tests)
+# From repo root, per workspace
+npm test --workspace=apps/api   # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (67 tests)
+npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (43 tests)
+npm run test:e2e                # Playwright E2E (auth, dashboard) — requires `npx playwright install` once
 ```
 
 ---
@@ -434,7 +451,7 @@ To send the two app-side emails in production:
 2. Set in `.env`:
    ```
    RESEND_API_KEY=re_...
-   EMAIL_FROM=EvenUp <noreply@your-domain.com>
+   EMAIL_FROM=Even-Up <noreply@your-domain.com>
    APP_URL=https://your-domain.com
    ```
 3. `make deploy`.
@@ -453,7 +470,13 @@ docker compose -f docker-compose.prod.yml logs -f api
 
 ### CI Pipeline
 
-Five jobs run on every push/PR to `main` (`.github/workflows/ci.yml`): lint, typecheck (both workspaces, with React Router typegen run first), API tests (against a real Postgres service container), frontend tests, and a Docker build + smoke test that builds the production images, brings the full stack up, and verifies the public entrypoint actually responds. See [docs/architecture.md](docs/architecture.md) for the full pipeline diagram.
+Seven jobs run on every push/PR to `main` or `dev` (`.github/workflows/ci.yml`): a
+dependency audit (`npm audit --audit-level=high`), lint + format check, typecheck (both
+workspaces, with React Router typegen run first), API tests (against a real Postgres
+service container), frontend tests, Playwright E2E tests, and a Docker build + smoke
+test that builds the production images, brings the full stack up, and verifies the
+public entrypoint actually responds. See [docs/architecture.md](docs/architecture.md)
+for the full pipeline diagram.
 
 ---
 
@@ -593,6 +616,13 @@ self-hosted Postgres + Prisma database for all application data. See
 - [x] Stretch: multi-currency support — per-expense currency selection (31 ECB currencies),
       historical exchange rates via Frankfurter API, permanent DB cache, original amount
       preserved for display, per-currency balance breakdown toggle; see [ADR 010](docs/adr/010-multi-currency.md)
+- [x] Stretch: credit card FX markup — per-user default + per-expense override percentage
+      applied on top of the exchange-rate conversion; see [ADR 011](docs/adr/011-credit-card-fx-markup.md)
+- [x] Stretch: BFF session management — session moved from `supabase-js`/`localStorage` to
+      HttpOnly cookies owned entirely by the Fastify API, closing an XSS token-theft vector;
+      see [ADR 005](docs/adr/005-bff-session-management.md)
+- [x] Stretch: Google sign-in (server-side PKCE OAuth) and passkey (WebAuthn) login/registration
+- [x] Stretch: change password and delete-account self-service in Settings
 - [ ] Stretch: recurring expenses (rent, subscriptions)
 - [ ] Stretch: receipt photo upload
 - [ ] Stretch: charts and spending statistics per group
@@ -604,7 +634,7 @@ self-hosted Postgres + Prisma database for all application data. See
 | Document                                                                 | Description                                                                                                                                   |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Architecture](docs/architecture.md)                                     | System overview, frontend component hierarchy, auth flow, data flow, security model, testing strategy                                         |
-| [API Reference](docs/api-reference.md)                                   | Full REST API documentation with request/response examples for all 20 endpoints                                                               |
+| [API Reference](docs/api-reference.md)                                   | Full REST API documentation with request/response examples for every endpoint                                                                 |
 | [Milestones](.ai/grading/milestones.md)                                         | Criterion-to-code mapping for each milestone (grading reference)                                                                              |
 | [Ausarbeitung](.ai/grading/ausarbeitung.md)                                     | Full written report (Einleitung, Architektur, Umsetzung pro Meilenstein, Deployment, Reflexion); `docs/ausarbeitung.pdf` is the generated PDF |
 | [ADR 001 — SPA Mode](docs/adr/001-spa-mode.md)                                         | Why SPA over SSR for a fully authenticated app                                                                |
@@ -617,6 +647,7 @@ self-hosted Postgres + Prisma database for all application data. See
 | [ADR 008 — CSP Build-time Hash Injection](docs/adr/008-csp-build-time-hash-injection.md) | Content Security Policy with inline-script hashes injected at build time via Vite plugin                    |
 | [ADR 009 — Load-more Pagination](docs/adr/009-load-more-pagination.md)                 | Offset-based pagination for expenses/activities: `{ items, total }` shape, key-prop reset pattern             |
 | [ADR 010 — Multi-currency](docs/adr/010-multi-currency.md)                             | Per-expense currency with historical ECB rates via Frankfurter API; permanent DB cache; dual-amount storage    |
+| [ADR 011 — Credit Card FX Markup](docs/adr/011-credit-card-fx-markup.md)               | Per-user default + per-expense override markup percentage applied post-conversion                             |
 
 ---
 

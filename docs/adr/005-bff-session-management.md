@@ -18,7 +18,7 @@ token theft in SPAs.
 Two alternatives were considered:
 
 1. **`@supabase/ssr`** — Supabase's official cookie-based session package. Rejected: it
-   requires server-side rendering to set cookies on the initial HTML response. EvenUp uses
+   requires server-side rendering to set cookies on the initial HTML response. Even-Up uses
    `ssr: false` (ADR 001) for good reasons, and this can't be changed without fundamental
    re-architecture.
 
