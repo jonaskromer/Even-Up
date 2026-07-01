@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 import { Group, Member, SplitMode, NewExpenseInput } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
@@ -32,6 +32,9 @@ interface AddExpenseFormProps {
   subtitle?: string;
   defaults?: ExpenseDefaults;
   defaultMarkupRate?: number;
+  /** Optional content rendered between the page title and the form card — e.g. a
+   * "this expense came from a receipt, edit its line items" call-to-action. */
+  banner?: ReactNode;
 }
 
 function parseEurosToCents(input: string): number {
@@ -158,6 +161,7 @@ export function AddExpenseForm({
   subtitle,
   defaults,
   defaultMarkupRate = 0,
+  banner,
 }: AddExpenseFormProps) {
   const { t } = useLanguage();
   const today = new Date().toISOString().slice(0, 10);
@@ -203,14 +207,17 @@ export function AddExpenseForm({
 
     if (splitMode !== 'equal') {
       setSplitInputs((prev) => {
+        // Deliberately don't delete the toggled-off member's entry: SplitModeToggle
+        // and computeExactSplits only ever read entries for current participants, so
+        // a removed member's stale value is inert while excluded — and keeping it
+        // means re-adding them restores what they had instead of resetting to a
+        // default that silently changes the total (and can leave a misleading
+        // "complete" split with a newly-added €0 member).
+        if (!next.has(memberId) || memberId in prev) return prev;
         const updated = { ...prev };
-        if (!next.has(memberId)) {
-          delete updated[memberId];
-        } else if (!(memberId in updated)) {
-          if (splitMode === 'exact') updated[memberId] = '0.00';
-          else if (splitMode === 'percent') updated[memberId] = '0.0';
-          else updated[memberId] = '1';
-        }
+        if (splitMode === 'exact') updated[memberId] = '0.00';
+        else if (splitMode === 'percent') updated[memberId] = '0.0';
+        else updated[memberId] = '1';
         return updated;
       });
     }
@@ -296,6 +303,8 @@ export function AddExpenseForm({
           <h1 className="text-h1">{resolvedTitle}</h1>
           <p className="text-muted-foreground">{resolvedSubtitle}</p>
         </header>
+
+        {banner && <div className="mb-4">{banner}</div>}
 
         {submitError && (
           <Alert variant="destructive" className="mb-4">

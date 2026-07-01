@@ -9,7 +9,7 @@ import { computeAndValidateSplits } from '../services/computeSplits.js';
 import { getRate } from '../services/exchangeRateService.js';
 import { HttpError } from '../lib/HttpError.js';
 
-function formatExpense(e: {
+type FormatExpenseInput = {
   id: string;
   groupId: string;
   description: string;
@@ -23,7 +23,30 @@ function formatExpense(e: {
   updatedAt: Date;
   splitMode: string;
   splits: { userId: string; owedCents: number }[];
-}) {
+  receiptStoreName?: string | null;
+  lineItems?: {
+    id: string;
+    name: string;
+    quantity: number;
+    priceCents: number;
+    excluded: boolean;
+    splitMode: string;
+    assignments: {
+      userId: string;
+      shareWeight: number;
+      exactCents: number | null;
+      percent: number | null;
+    }[];
+  }[];
+};
+
+export const expenseInclude = {
+  paidBy: { select: { id: true, name: true } },
+  splits: true,
+  lineItems: { include: { assignments: true }, orderBy: { sortOrder: 'asc' as const } },
+};
+
+export function formatExpense(e: FormatExpenseInput) {
   return {
     id: e.id,
     groupId: e.groupId,
@@ -41,6 +64,21 @@ function formatExpense(e: {
       userId: s.userId,
       owedCents: s.owedCents,
     })),
+    receiptStoreName: e.receiptStoreName ?? undefined,
+    lineItems: (e.lineItems ?? []).map((li) => ({
+      id: li.id,
+      name: li.name,
+      quantity: li.quantity,
+      priceCents: li.priceCents,
+      excluded: li.excluded,
+      splitMode: li.splitMode,
+      assignments: li.assignments.map((a) => ({
+        userId: a.userId,
+        weight: a.shareWeight,
+        exactCents: a.exactCents ?? undefined,
+        percent: a.percent ?? undefined,
+      })),
+    })),
   };
 }
 
@@ -49,7 +87,7 @@ const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-async function resolveConvertedAmount(
+export async function resolveConvertedAmount(
   originalAmountCents: number,
   originalCurrency: string,
   groupCurrency: string,
@@ -71,10 +109,7 @@ export async function expensesRoutes(app: FastifyInstance) {
       const [items, total] = await Promise.all([
         prisma.expense.findMany({
           where: { groupId },
-          include: {
-            paidBy: { select: { id: true, name: true } },
-            splits: true,
-          },
+          include: expenseInclude,
           orderBy: [{ date: 'desc' }, { id: 'desc' }],
           take: limit,
           skip: offset,
@@ -94,10 +129,7 @@ export async function expensesRoutes(app: FastifyInstance) {
 
       const expense = await prisma.expense.findUnique({
         where: { id: expenseId, groupId },
-        include: {
-          paidBy: { select: { id: true, name: true } },
-          splits: true,
-        },
+        include: expenseInclude,
       });
 
       if (!expense) throw new HttpError(404, 'Ausgabe nicht gefunden.');
@@ -174,10 +206,7 @@ export async function expensesRoutes(app: FastifyInstance) {
             },
           },
         },
-        include: {
-          paidBy: { select: { id: true, name: true } },
-          splits: true,
-        },
+        include: expenseInclude,
       });
 
       logActivity(groupId, req.user!.id, 'expense_created', {
@@ -273,10 +302,7 @@ export async function expensesRoutes(app: FastifyInstance) {
             },
           },
         },
-        include: {
-          paidBy: { select: { id: true, name: true } },
-          splits: true,
-        },
+        include: expenseInclude,
       });
 
       logActivity(groupId, req.user!.id, 'expense_edited', {

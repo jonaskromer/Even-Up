@@ -29,6 +29,15 @@ A web application for splitting expenses fairly among groups. Create groups for 
   - **Exact** — specific amounts per person
   - **Percentage** — percentage-based split
   - **Shares** — weighted shares (e.g. 2:1:1)
+- **Receipt scanning (AI-assisted)** — photograph or upload a receipt; Google Gemini
+  extracts the store name, date, and every line item (with net/gross tax and per-item
+  discount reconciliation) as structured data; a review screen lets you assign each
+  item to group members with its own split mode (equal/exact/percent/shares), exclude
+  irrelevant lines (e.g. a deposit refund) without losing them, and see a live
+  per-member running total before saving one expense with the resulting splits. The
+  line items remain stored and re-editable later via "Edit line items" on the expense.
+  Optional — hidden entirely if `GEMINI_API_KEY` isn't configured. See
+  [ADR 012](docs/adr/012-receipt-ai-parsing.md)
 
 ### Balances & Settlements
 
@@ -79,6 +88,7 @@ A web application for splitting expenses fairly among groups. Create groups for 
 | **Validation**          | Zod (shared schemas between client and server)                                                |
 | **Auth**                | Supabase Auth (Cloud) via a Fastify BFF — HttpOnly cookie sessions, JWT verified server-side via `jose`/JWKS, server-side PKCE for Google OAuth |
 | **Database**            | PostgreSQL 16 + Prisma 7 ORM (`@prisma/adapter-pg`)                                           |
+| **AI**                  | Google Gemini (receipt OCR/line-item extraction — vision input, native JSON structured output, retry + primary/secondary model fallback) |
 | **Email**               | Resend (join-request emails; Supabase's auth emails are SMTP-routed through the same account) |
 | **Reverse Proxy / TLS** | Caddy (automatic Let's Encrypt HTTPS in production)                                           |
 | **Testing**             | Vitest, React Testing Library, Fastify `app.inject()`, Playwright (E2E, mocked auth)           |
@@ -110,16 +120,17 @@ A web application for splitting expenses fairly among groups. Create groups for 
 |   lazily upserts local User row          |
 |  Route modules: auth, groups, expenses,  |
 |   settlements, invites, activities,      |
-|   join-requests                          |
+|   join-requests, receipts (Gemini OCR)   |
 +----------------+-------------------------+
-                 |
-                 |  Prisma ORM
-                 v
-+----------------+-------------------------+
-|            PostgreSQL 16                 |
-|  User, Group, GroupMember, Expense       |
-|  ExpenseSplit, Settlement, GroupInvite   |
-|  Activity, GroupJoinRequest              |
+                 |              |
+                 |  Prisma ORM  |  HTTPS (image + prompt,
+                 v              |  discarded after response)
++----------------+-------------------------+   v
+|            PostgreSQL 16                 |  Google Gemini API
+|  User, Group, GroupMember, Expense       |  (receipt line-item
+|  ExpenseSplit, Settlement, GroupInvite   |   extraction)
+|  Activity, GroupJoinRequest, ExchangeRate|
+|  ReceiptLineItem, ReceiptLineItemAssignment
 +------------------------------------------+
   Supabase Cloud: auth.users (credentials,
   sessions) separate from this database
@@ -144,13 +155,15 @@ All monetary values are stored as **integer cents** to avoid floating-point roun
 | **User**             | id (Supabase Auth user id), name, email, preferredCurrency, defaultMarkupRate, createdAt |
 | **Group**            | id, name, currency (base currency), createdAt, updatedAt                     |
 | **GroupMember**      | groupId, userId, role                                                        |
-| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, appliedMarkupRate, splitMode, date |
+| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, appliedMarkupRate, splitMode, date, receiptStoreName? |
 | **ExpenseSplit**     | expenseId, userId, owedCents                                                 |
 | **Settlement**       | id, groupId, fromUserId, toUserId, amountCents, date, note?                  |
 | **GroupInvite**      | id, token (unique), groupId, createdBy, expiresAt                            |
 | **Activity**         | id, groupId, userId, type, data (JSON), createdAt                            |
 | **GroupJoinRequest** | id, groupId, invitedUserId, invitedByUserId, status, createdAt, respondedAt? |
 | **ExchangeRate**     | id, date, fromCurrency, toCurrency, rate (unique on date+from+to — permanent cache) |
+| **ReceiptLineItem**  | id, expenseId, name, quantity, priceCents, sortOrder, excluded, splitMode (equal/exact/percent/shares) |
+| **ReceiptLineItemAssignment** | lineItemId, userId, shareWeight, exactCents?, percent? (only the field matching the item's splitMode is used) |
 
 Credentials and password-reset tokens live entirely in Supabase Auth's own `auth.users`
 table (managed by Supabase, separate from this database) — there is no `passwordHash`
@@ -162,14 +175,26 @@ or password-reset-token table in this app's schema.
 
 ### Auth
 
-Sign-up, login, logout, and password reset go directly from the frontend to Supabase
-Auth via `@supabase/supabase-js` — they're not API endpoints. The API only verifies the
-resulting JWT (`requireAuth`) and exposes:
+All auth is handled by the Fastify BFF — the browser only ever holds `HttpOnly`
+session cookies, never a token in JavaScript. See [ADR 005](docs/adr/005-bff-session-management.md)
+and [docs/api-reference.md](docs/api-reference.md#authentication) for full request/response
+details of every endpoint below.
 
-| Method | Path             | Description                                 |
-| ------ | ---------------- | ------------------------------------------- |
-| GET    | `/api/auth/me`   | Current user profile (includes `defaultMarkupRate`) |
-| PATCH  | `/api/auth/me`   | Update name, language, preferred currency, or `defaultMarkupRate` |
+| Method | Path                          | Description                                       |
+| ------ | ----------------------------- | -------------------------------------------------- |
+| POST   | `/api/auth/register`          | Create account, sets session cookies                |
+| POST   | `/api/auth/login`              | Email/password login                                |
+| POST   | `/api/auth/logout`             | Clear session cookies                               |
+| POST   | `/api/auth/refresh`            | Refresh the access token using the refresh cookie   |
+| GET    | `/api/auth/google`             | Start server-side PKCE Google OAuth flow            |
+| GET    | `/api/auth/callback`           | Google OAuth callback, sets session cookies         |
+| POST   | `/api/auth/exchange`           | Exchange a client-side token pair (passkeys) for cookies |
+| POST   | `/api/auth/forgot-password`    | Send a Supabase password-reset email                |
+| GET    | `/api/auth/session-tokens`     | Expose current cookie tokens (WebAuthn enrollment only) |
+| GET    | `/api/auth/me`                 | Current user profile (includes `defaultMarkupRate`) |
+| PATCH  | `/api/auth/me`                 | Update name, language, preferred currency, or `defaultMarkupRate` |
+| POST   | `/api/auth/change-password`    | Change password via the current session             |
+| DELETE | `/api/auth/me`                 | Delete account (`409` if shared financial records exist) |
 
 ### Groups
 
@@ -187,16 +212,27 @@ resulting JWT (`requireAuth`) and exposes:
 | ------ | ------------------------------- | -------------------------- |
 | GET    | `/api/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
 | POST   | `/api/groups/:id/expenses`      | Create expense with splits (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
-| GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) |
+| GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) — includes `lineItems`/`receiptStoreName` for receipt-created expenses |
 | PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
 | DELETE | `/api/groups/:id/expenses/:eid` | Delete expense             |
 
 ### Settlements
 
-| Method | Path                                      | Description         |
-| ------ | ----------------------------------------- | ------------------- |
-| GET    | `/api/groups/:id/settle-up?simplify=true` | Suggested transfers |
-| POST   | `/api/groups/:id/settlements`             | Record a settlement |
+| Method | Path                                         | Description              |
+| ------ | --------------------------------------------- | ------------------------- |
+| GET    | `/api/groups/:id/settlements`                | List recorded settlements |
+| POST   | `/api/groups/:id/settlements`                | Record a settlement       |
+| PUT    | `/api/groups/:id/settlements/:settlementId`  | Update a settlement       |
+| DELETE | `/api/groups/:id/settlements/:settlementId`  | Delete a settlement       |
+| GET    | `/api/groups/:id/settle-up?simplify=true`    | Suggested transfers       |
+
+### Receipts (AI-assisted expense creation)
+
+| Method | Path                                    | Description                                                                                             |
+| ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/groups/:id/receipts/parse`        | Upload a receipt image; streams retry/fallback progress, then the extracted store/line items (NDJSON)    |
+| POST   | `/api/groups/:id/receipts`              | Create one expense from reviewed line items + per-item splits                                             |
+| PUT    | `/api/groups/:id/receipts/:expenseId`   | Replace an expense's line items + splits                                                                  |
 
 ### Invites
 
@@ -209,6 +245,7 @@ resulting JWT (`requireAuth`) and exposes:
 
 | Method | Path                         | Description                         |
 | ------ | ---------------------------- | ----------------------------------- |
+| GET    | `/api/activities`            | Activity events across all of the user's groups (paginated, powers the dashboard's global feed) |
 | GET    | `/api/groups/:id/activities` | Activity events for a group (paginated, `?limit=20&offset=0`) |
 
 ### Join Requests
@@ -241,21 +278,25 @@ resulting JWT (`requireAuth`) and exposes:
 │   │   │   │   ├── groups.$groupId.tsx  # /groups/:id
 │   │   │   │   ├── groups.$groupId_.new-expense.tsx
 │   │   │   │   ├── groups.$groupId_.expenses.$expenseId.edit.tsx
+│   │   │   │   ├── groups.$groupId_.receipt.tsx  # upload → processing → review → confirm
 │   │   │   │   └── invite.$token.tsx    # /invite/:token
 │   │   │   ├── components/
 │   │   │   │   ├── ui/         # shadcn/ui (Button, Card, Input, Label, Alert)
-│   │   │   │   ├── dashboard/  # BalanceBanner, GroupList, GroupCard
+│   │   │   │   ├── dashboard/  # BalanceBanner, GroupList, GroupCard, GlobalActivityFeed
 │   │   │   │   ├── group/      # GroupDetail, ExpenseFeed, BalancesPanel, MembersPanel,
 │   │   │   │   │               # SettleUpPanel, InviteLinkButton, ActivityLog,
 │   │   │   │   │               # ImportExpensesButton
 │   │   │   │   ├── expense/    # AddExpenseForm, SplitModeToggle
+│   │   │   │   ├── receipt/    # ReceiptUploadStep, ReceiptProcessingStep,
+│   │   │   │   │               # ReceiptLineItemReview (per-item equal/exact/percent/shares)
 │   │   │   │   ├── feedback/   # LoadingState, ErrorState
 │   │   │   │   └── layout/     # SiteHeader (with ThemeToggle), SiteFooter,
 │   │   │   │                   # PendingInvitationsBell
 │   │   │   ├── context/        # AuthContext (Supabase session-backed login,
 │   │   │   │                   # register, logout), PendingInvitesContext
 │   │   │   │                   # (incoming join requests)
-│   │   │   ├── lib/            # apiClient, computeBalances, requireAuth,
+│   │   │   ├── lib/            # apiClient (incl. postFileStream for NDJSON uploads),
+│   │   │   │                   # computeBalances, receiptSplits, requireAuth,
 │   │   │   │                   # supabaseClient, utils
 │   │   │   ├── root.tsx        # Root layout + AuthProvider + PendingInvitesProvider
 │   │   │   ├── routes.ts       # File-based route config (@react-router/fs-routes)
@@ -266,25 +307,27 @@ resulting JWT (`requireAuth`) and exposes:
 │   ├── api/                    # Fastify REST API
 │   │   ├── src/
 │   │   │   ├── routes/         # auth, groups, expenses, settlements, invites, activities,
-│   │   │   │                   # joinRequests
+│   │   │   │                   # joinRequests, receipts (Gemini OCR + line-item expenses)
 │   │   │   ├── middleware/     # requireAuth (verifies Supabase JWT, upserts User),
 │   │   │   │                   # requireGroupMember, errorHandler
 │   │   │   ├── services/       # balanceService, debtSimplificationService, authService
 │   │   │   │                   # (Supabase JWT verification via jose), activityService,
-│   │   │   │                   # emailService, exchangeRateService (Frankfurter + DB cache)
+│   │   │   │                   # emailService, exchangeRateService (Frankfurter + DB cache),
+│   │   │   │                   # geminiReceiptService (Gemini OCR, retry + model fallback)
 │   │   │   ├── generated/     # Prisma 7 generated client
 │   │   │   ├── app.ts         # Fastify app factory (buildApp)
 │   │   │   └── server.ts      # Entry point (listen)
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma  # 10 models (User, Group, GroupMember, Expense, ExpenseSplit,
+│   │   │   ├── schema.prisma  # 12 models (User, Group, GroupMember, Expense, ExpenseSplit,
 │   │   │   │                  #            Settlement, GroupInvite, Activity, GroupJoinRequest,
-│   │   │   │                  #            ExchangeRate)
+│   │   │   │                  #            ExchangeRate, ReceiptLineItem,
+│   │   │   │                  #            ReceiptLineItemAssignment)
 │   │   │   └── seed.ts
 │   │   └── prisma.config.ts   # Prisma 7 config (datasource URL for migrations)
 │   ├── web-static/             # M1 HTML/CSS prototype (archive)
 │   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/auth/me
 ├── packages/
-│   └── shared/                 # Zod schemas (group, expense, settlement)
+│   └── shared/                 # Zod schemas (group, expense, settlement, receipt)
 ├── docs/
 │   ├── milestones.md           # Criterion-to-code mapping for grading
 │   ├── architecture.md         # System, frontend & API architecture diagrams
@@ -295,7 +338,9 @@ resulting JWT (`requireAuth`) and exposes:
 │       ├── 003-prisma-driver-adapter.md # Prisma 5 → 7 migration
 │       ├── 004-supabase-auth.md   # Custom JWT → Supabase Auth (Cloud) migration
 │       ├── 005-009-…              # BFF session, server-side splits, RR v8, CSP, pagination
-│       └── 010-multi-currency.md  # Per-expense currency, Frankfurter API, DB rate cache
+│       ├── 010-multi-currency.md  # Per-expense currency, Frankfurter API, DB rate cache
+│       ├── 011-credit-card-fx-markup.md # Per-user/per-expense credit card FX markup
+│       └── 012-receipt-ai-parsing.md    # Gemini receipt OCR, line-item split modes
 ├── docker-compose.yml          # PostgreSQL 16 (development)
 ├── docker-compose.prod.yml     # Production (Caddy + frontend + API + Postgres)
 ├── Caddyfile                   # Reverse proxy + automatic HTTPS (Let's Encrypt or local CA)
@@ -371,8 +416,8 @@ npm run dev                     # Vite on http://localhost:5173
 
 ```bash
 # From repo root, per workspace
-npm test --workspace=apps/api   # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates (67 tests)
-npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, ExpenseItem, LoadingState, ErrorState (43 tests)
+npm test --workspace=apps/api   # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates, receipts, Gemini parsing (94 tests)
+npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, receiptSplits, ExpenseItem, AddExpenseForm, LoadingState, ErrorState, receipt route loader (61 tests)
 npm run test:e2e                # Playwright E2E (auth, dashboard) — requires `npx playwright install` once
 ```
 
@@ -455,6 +500,25 @@ To send the two app-side emails in production:
    APP_URL=https://your-domain.com
    ```
 3. `make deploy`.
+
+### Receipt Scanning (Gemini)
+
+The "Add Receipt" feature is entirely optional — if `GEMINI_API_KEY` is unset, the
+button is hidden client-side and the parse endpoint 404s, with no effect on any other
+part of the app. To enable it:
+
+1. Create a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
+2. Set in `.env`:
+   ```
+   GEMINI_API_KEY=AIzaSy...
+   GEMINI_MODEL_PRIMARY=gemini-3.5-flash
+   GEMINI_MODEL_SECONDARY=gemini-2.5-flash
+   ```
+3. `make deploy` (or restart your local dev server — env vars aren't hot-reloaded).
+
+The primary model is retried up to 3 times with a random jitter delay before falling
+back to the secondary model once; both model names are configurable so either can be
+bumped without a code change. See [ADR 012](docs/adr/012-receipt-ai-parsing.md).
 
 ### Logs
 
@@ -623,8 +687,11 @@ self-hosted Postgres + Prisma database for all application data. See
       see [ADR 005](docs/adr/005-bff-session-management.md)
 - [x] Stretch: Google sign-in (server-side PKCE OAuth) and passkey (WebAuthn) login/registration
 - [x] Stretch: change password and delete-account self-service in Settings
+- [x] Stretch: AI-assisted receipt scanning — Gemini extracts store name/date/line items
+      from a photo; review screen assigns items to members with per-item equal/exact/
+      percent/shares splits, excludable items, live per-member totals, and a re-editable
+      "Edit line items" flow on the resulting expense; see [ADR 012](docs/adr/012-receipt-ai-parsing.md)
 - [ ] Stretch: recurring expenses (rent, subscriptions)
-- [ ] Stretch: receipt photo upload
 - [ ] Stretch: charts and spending statistics per group
 
 ---
@@ -648,6 +715,7 @@ self-hosted Postgres + Prisma database for all application data. See
 | [ADR 009 — Load-more Pagination](docs/adr/009-load-more-pagination.md)                 | Offset-based pagination for expenses/activities: `{ items, total }` shape, key-prop reset pattern             |
 | [ADR 010 — Multi-currency](docs/adr/010-multi-currency.md)                             | Per-expense currency with historical ECB rates via Frankfurter API; permanent DB cache; dual-amount storage    |
 | [ADR 011 — Credit Card FX Markup](docs/adr/011-credit-card-fx-markup.md)               | Per-user default + per-expense override markup percentage applied post-conversion                             |
+| [ADR 012 — Receipt AI Parsing](docs/adr/012-receipt-ai-parsing.md)                     | Gemini OCR with retry/fallback models, streamed progress, normalized line-item schema, per-item split modes    |
 
 ---
 

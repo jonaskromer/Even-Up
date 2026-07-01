@@ -277,6 +277,7 @@ List all groups the authenticated user is a member of.
     "id": "clx...",
     "name": "Ski Trip 2026",
     "currency": "EUR",
+    "receiptsEnabled": true,
     "members": [
       { "id": "clx...", "name": "Demo User", "email": "demo@even-up.local", "role": "owner" },
       { "id": "clx...", "name": "Anna", "email": "anna@even-up.local", "role": "member" }
@@ -284,6 +285,9 @@ List all groups the authenticated user is a member of.
   }
 ]
 ```
+
+`receiptsEnabled` reflects whether `GEMINI_API_KEY` is configured server-side — the
+frontend hides the "Add Receipt" button when `false`.
 
 ### POST `/api/groups`
 
@@ -449,7 +453,9 @@ stable pagination). Supports offset-based pagination.
         { "userId": "clx...", "owedCents": 1500 },
         { "userId": "clx...", "owedCents": 1500 },
         { "userId": "clx...", "owedCents": 1500 }
-      ]
+      ],
+      "receiptStoreName": null,
+      "lineItems": []
     }
   ],
   "total": 42
@@ -459,6 +465,10 @@ stable pagination). Supports offset-based pagination.
 `amountCents` is always in the **group's base currency** (used for balance calculation).
 `originalAmountCents` and `originalCurrency` are the values the user entered (equal to `amountCents`/group currency when no conversion was needed).
 
+`receiptStoreName` and `lineItems` are populated only for expenses created via the
+[Receipts](#receipts) endpoints below — `null`/`[]` for ordinary expenses. See the
+single-expense endpoint just below for the full `lineItems` shape.
+
 `total` is the count of all expenses in the group (regardless of `limit`/`offset`), used by
 the frontend to show the "X of Y" counter and determine whether to show a "Load more" button.
 
@@ -466,7 +476,34 @@ the frontend to show the "X of Y" counter and determine whether to show a "Load 
 
 Fetch a single expense by ID. Used by the edit route to load the current expense data.
 
-**Response `200`:** Expense object (same shape as a single item in the list above)
+**Response `200`:** Expense object (same shape as a single item in the list above), with
+`lineItems` fully populated for receipt-created expenses:
+
+```json
+{
+  "...": "...",
+  "receiptStoreName": "Rewe",
+  "lineItems": [
+    {
+      "id": "clx...",
+      "name": "Bio Milch 1L",
+      "quantity": 2,
+      "priceCents": 258,
+      "excluded": false,
+      "splitMode": "shares",
+      "assignments": [
+        { "userId": "clx...", "weight": 1 },
+        { "userId": "clx...", "weight": 1 }
+      ]
+    }
+  ]
+}
+```
+
+`assignments[].weight`/`exactCents`/`percent` are only meaningful for the matching
+`splitMode` (`shares`/`exact`/`percent` respectively) — `equal` mode ignores all three
+and divides the item price evenly across its assignees. This is the data the frontend's
+"Edit line items" flow re-hydrates into the review screen.
 
 **Errors:** `403` not a member, `404` not found
 
@@ -516,6 +553,116 @@ Update an existing expense. Deletes old splits and recalculates. Same currency-c
 Delete an expense and its associated splits.
 
 **Response `204`:** No content
+
+---
+
+## Receipts
+
+AI-assisted expense creation: upload a receipt photo, review the extracted line items
+with per-item splits, then save one expense. See [ADR 012](adr/012-receipt-ai-parsing.md)
+for the full design (Gemini model choice, retry/fallback, streamed progress, why line
+items are stored normalized rather than as JSON).
+
+All endpoints require authentication and group membership.
+
+### POST `/api/groups/:groupId/receipts/parse`
+
+Upload a receipt image for OCR/structured extraction via Google Gemini. Returns `404`
+if `GEMINI_API_KEY` isn't configured (check `Group.receiptsEnabled` first to hide the
+UI entry point instead of hitting this).
+
+**Request:** `multipart/form-data` with a single `file` field (`image/jpeg`, `image/png`,
+`image/webp`, `image/heic`, or `image/heif`; max 10MB).
+
+**Response:** `200`, but the body is **newline-delimited JSON** (`Content-Type: application/x-ndjson`),
+not a single JSON object — the request can take anywhere from a couple of seconds to
+~2 minutes (the primary model is retried up to 3 times with jitter before falling back
+to a secondary model), so progress events are streamed as they happen:
+
+```
+{"type":"progress","model":"primary","attempt":1,"attempts":3}
+{"type":"progress","model":"secondary","attempt":1,"attempts":1}
+{"type":"result","data":{"storeName":"Rewe","date":"2026-06-30","lineItems":[{"name":"Bio Milch 1L","quantity":2,"priceCents":258}],"subtotalCents":258,"grandTotalCents":258}}
+```
+
+Each line is one JSON object with a `type`:
+- `"progress"` — `{ model: 'primary' | 'secondary', attempt: number, attempts: number }`, emitted before each Gemini call attempt.
+- `"result"` — `{ data: ParsedReceipt }`, the final successful extraction; the stream ends after this.
+- `"error"` — `{ status: number, message: string }`, emitted instead of `"result"` if parsing ultimately fails (after exhausting retries and the fallback model); the stream ends after this. The frontend surfaces this the same way it would a normal HTTP error (e.g. `503`).
+
+The image is never persisted — it's base64-encoded in memory for the single outbound
+Gemini request and discarded once the response is written.
+
+**Errors (regular JSON, returned before streaming starts):** `400` no file or
+unsupported MIME type, `404` receipt parsing not enabled.
+
+### POST `/api/groups/:groupId/receipts`
+
+Create one expense from reviewed line items. Each line item computes its own
+per-assignee split server-side (never trusting client-computed sums) according to its
+own `splitMode`, then all items are aggregated into one `exactSplits` array and run
+through the same `computeAndValidateSplits`/currency-conversion/markup pipeline used by
+the plain expense endpoints.
+
+**Request body:**
+
+```json
+{
+  "storeName": "Rewe",
+  "paidByUserId": "clx...",
+  "date": "2026-06-30",
+  "currency": "EUR",
+  "markupRate": 0,
+  "lineItems": [
+    {
+      "name": "Bio Milch 1L",
+      "quantity": 2,
+      "priceCents": 258,
+      "excluded": false,
+      "splitMode": "shares",
+      "assignments": [
+        { "userId": "clx...", "weight": 1 },
+        { "userId": "clx...", "weight": 1 }
+      ]
+    },
+    {
+      "name": "Pfand-Rückgabe",
+      "quantity": 1,
+      "priceCents": -150,
+      "excluded": true,
+      "splitMode": "shares",
+      "assignments": []
+    }
+  ]
+}
+```
+
+- `currency`/`markupRate` are optional, same semantics as the plain expense endpoints.
+- `excluded: true` line items are kept (for later editing) but contribute nothing to
+  the expense total or any split — a non-excluded item must have at least one assignment.
+- `splitMode` per item is one of `equal`, `exact`, `percent`, `shares`:
+  - `equal` — the item price is divided evenly across its assignees; `weight`/`exactCents`/`percent` are ignored.
+  - `exact` — each assignment must set `exactCents`; they must sum to the item's `priceCents` (±1 cent per assignee tolerance).
+  - `percent` — each assignment must set `percent`; they must sum to 100 (±0.5 tolerance).
+  - `shares` — each assignment's `weight` (default 1) determines its proportional share of the item price.
+
+**Response `201`:** Expense object (same shape as `GET .../expenses/:expenseId`, including `lineItems`)
+
+**Errors:** `422` an item's `exact`/`percent` values don't add up, an assignment references a non-group-member, or the total expense amount is ≤ 0
+
+### PUT `/api/groups/:groupId/receipts/:expenseId`
+
+Replace an expense's line items and splits — used by the "Edit line items" flow.
+Delete-all + recreate semantics for both `ReceiptLineItem` and `ExpenseSplit` rows,
+same pattern as the plain expense `PUT`.
+
+**Request body:** Same as `POST` above, plus `updatedAt` ISO string (required for
+optimistic-concurrency check).
+
+**Response `200`:** Updated expense object
+
+**Errors:** `404` not found, `409` concurrent edit (`updatedAt` mismatch), `422` same
+per-item validation as `POST`
 
 ---
 
@@ -729,4 +876,9 @@ Validation errors (Zod) include field-level details:
 | `404`  | Resource not found                                                               |
 | `409`  | Duplicate (email already exists, already a member, join request already pending) or concurrent edit conflict |
 | `500`  | Internal server error                                                            |
-| `503`  | Exchange rate unavailable (Frankfurter API unreachable, no cached rate in DB)    |
+| `503`  | Exchange rate unavailable (Frankfurter API unreachable, no cached rate in DB); Gemini unreachable after retries + fallback |
+
+`POST /api/groups/:groupId/receipts/parse` is the one exception to this table: once
+streaming has started the HTTP status is always `200`, and errors are instead
+delivered as a `{"type":"error", "status", "message"}` line in the NDJSON body — see
+the [Receipts](#receipts) section above.

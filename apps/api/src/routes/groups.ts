@@ -7,6 +7,7 @@ import { computeBalances } from '../services/balanceService.js';
 import { HttpError } from '../lib/HttpError.js';
 import { logActivity } from '../services/activityService.js';
 import { isEmailConfigured, sendJoinRequestEmail } from '../services/emailService.js';
+import { isReceiptParsingEnabled } from '../services/geminiReceiptService.js';
 
 function formatGroup(g: {
   id: string;
@@ -18,6 +19,7 @@ function formatGroup(g: {
     id: g.id,
     name: g.name,
     currency: g.currency,
+    receiptsEnabled: isReceiptParsingEnabled(),
     members: g.members.map((m) => ({
       id: m.user.id,
       name: m.user.name,

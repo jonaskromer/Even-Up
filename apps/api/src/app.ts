@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import compress from '@fastify/compress';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import { env } from './env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRoutes } from './routes/auth.js';
@@ -12,6 +13,7 @@ import { settlementRoutes } from './routes/settlements.js';
 import { inviteRoutes } from './routes/invites.js';
 import { activityRoutes } from './routes/activities.js';
 import { joinRequestsRoutes } from './routes/joinRequests.js';
+import { receiptRoutes } from './routes/receipts.js';
 
 function getAllowedOrigins(): string[] {
   if (env.CORS_ORIGIN) return env.CORS_ORIGIN.split(',').map((o) => o.trim());
@@ -40,6 +42,7 @@ export function buildApp() {
   });
   app.register(cookie);
   app.register(compress);
+  app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   app.setErrorHandler(errorHandler);
 
   app.get('/api/health', async () => ({ status: 'ok' }));
@@ -51,6 +54,7 @@ export function buildApp() {
   app.register(inviteRoutes, { prefix: '/api' });
   app.register(activityRoutes, { prefix: '/api' });
   app.register(joinRequestsRoutes, { prefix: '/api' });
+  app.register(receiptRoutes, { prefix: '/api' });
 
   return app;
 }
