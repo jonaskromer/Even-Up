@@ -18,6 +18,8 @@ export interface Group {
 export interface ReceiptLineItemAssignment {
   userId: string;
   weight: number;
+  exactCents?: number;
+  percent?: number;
 }
 
 export interface ReceiptLineItem {
@@ -26,6 +28,7 @@ export interface ReceiptLineItem {
   quantity: number;
   priceCents: number;
   excluded: boolean;
+  splitMode: SplitMode;
   assignments: ReceiptLineItemAssignment[];
 }
 
@@ -55,21 +58,19 @@ export interface ParsedReceipt {
   grandTotalCents: number;
 }
 
+export interface ReceiptParseProgress {
+  model: 'primary' | 'secondary';
+  attempt: number;
+  attempts: number;
+}
+
 export interface ReceiptDraftLineItem {
   name: string;
   quantity: number;
   priceCents: number;
   excluded: boolean;
+  splitMode: SplitMode;
   assignments: ReceiptLineItemAssignment[];
-}
-
-export interface ReceiptExpenseInput {
-  storeName: string;
-  paidByUserId: string;
-  date: string;
-  currency?: string;
-  markupRate?: number;
-  lineItems: ReceiptDraftLineItem[];
 }
 
 export interface Balance {

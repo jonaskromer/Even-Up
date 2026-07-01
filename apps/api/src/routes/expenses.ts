@@ -30,7 +30,13 @@ type FormatExpenseInput = {
     quantity: number;
     priceCents: number;
     excluded: boolean;
-    assignments: { userId: string; shareWeight: number }[];
+    splitMode: string;
+    assignments: {
+      userId: string;
+      shareWeight: number;
+      exactCents: number | null;
+      percent: number | null;
+    }[];
   }[];
 };
 
@@ -65,7 +71,13 @@ export function formatExpense(e: FormatExpenseInput) {
       quantity: li.quantity,
       priceCents: li.priceCents,
       excluded: li.excluded,
-      assignments: li.assignments.map((a) => ({ userId: a.userId, weight: a.shareWeight })),
+      splitMode: li.splitMode,
+      assignments: li.assignments.map((a) => ({
+        userId: a.userId,
+        weight: a.shareWeight,
+        exactCents: a.exactCents ?? undefined,
+        percent: a.percent ?? undefined,
+      })),
     })),
   };
 }

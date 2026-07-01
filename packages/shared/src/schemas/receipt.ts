@@ -23,9 +23,14 @@ export const geminiReceiptResultSchema = z.object({
 
 export type GeminiReceiptResult = z.infer<typeof geminiReceiptResultSchema>;
 
+export const lineItemSplitModeSchema = z.enum(['equal', 'exact', 'percent', 'shares']);
+export type LineItemSplitMode = z.infer<typeof lineItemSplitModeSchema>;
+
 const receiptLineItemAssignmentSchema = z.object({
   userId: z.string().min(1),
   weight: z.number().int().positive().default(1),
+  exactCents: z.number().int().nonnegative().optional(),
+  percent: z.number().min(0).max(100).optional(),
 });
 
 const receiptLineItemSchema = z.object({
@@ -33,20 +38,40 @@ const receiptLineItemSchema = z.object({
   quantity: z.number().positive(),
   priceCents: z.number().int(),
   excluded: z.boolean().default(false),
+  splitMode: lineItemSplitModeSchema.default('shares'),
   assignments: z.array(receiptLineItemAssignmentSchema).default([]),
 });
 
 // A line item that isn't excluded must be assigned to at least one member, otherwise
-// its cost would silently vanish from the resulting split.
+// its cost would silently vanish from the resulting split. 'exact'/'percent' modes
+// additionally require every assignment to carry the field they need — the actual sum
+// checks (must total the item price / 100%) happen server-side in receipts.ts, mirroring
+// how computeAndValidateSplits validates the top-level expense split.
 function validateLineItems(
   lineItems: z.infer<typeof receiptLineItemSchema>[],
   ctx: z.RefinementCtx,
 ) {
   lineItems.forEach((item, i) => {
-    if (!item.excluded && item.assignments.length === 0) {
+    if (item.excluded) return;
+    if (item.assignments.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Nicht ausgeschlossene Positionen benötigen mindestens eine zugewiesene Person.',
+        path: [i, 'assignments'],
+      });
+      return;
+    }
+    if (item.splitMode === 'exact' && item.assignments.some((a) => a.exactCents == null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Bei exakter Aufteilung benötigt jede Person einen Betrag.',
+        path: [i, 'assignments'],
+      });
+    }
+    if (item.splitMode === 'percent' && item.assignments.some((a) => a.percent == null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Bei prozentualer Aufteilung benötigt jede Person einen Prozentsatz.',
         path: [i, 'assignments'],
       });
     }

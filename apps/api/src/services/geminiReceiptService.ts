@@ -58,23 +58,36 @@ export interface ParsedReceipt {
   grandTotalCents: number;
 }
 
+export interface ReceiptParseProgress {
+  model: 'primary' | 'secondary';
+  attempt: number;
+  attempts: number;
+}
+
+export type ReceiptParseProgressCallback = (progress: ReceiptParseProgress) => void;
+
 interface GeminiGenerateContentResponse {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
 }
+
+const PRIMARY_MODEL_RETRY_ATTEMPTS = 3;
+const RETRY_JITTER_MIN_MS = 300;
+const RETRY_JITTER_MAX_MS = 1200;
 
 export function isReceiptParsingEnabled(): boolean {
   return !!env.GEMINI_API_KEY;
 }
 
-export async function parseReceiptImage(
-  imageBase64: string,
-  mimeType: string,
-): Promise<ParsedReceipt> {
-  if (!env.GEMINI_API_KEY) {
-    throw new HttpError(404, 'Beleg-Scan ist auf diesem Server nicht aktiviert.');
-  }
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+function jitterDelay(minMs: number, maxMs: number): number {
+  return minMs + Math.random() * (maxMs - minMs);
+}
+
+async function callGemini(model: string, imageBase64: string, mimeType: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
   const body = {
     contents: [
       {
@@ -87,26 +100,82 @@ export async function parseReceiptImage(
     },
   };
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(20000),
-    });
-  } catch {
-    throw new HttpError(503, 'Beleg konnte nicht analysiert werden (Netzwerkfehler).');
-  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120000),
+  });
 
-  if (!res.ok) {
-    throw new HttpError(503, 'Beleg konnte nicht analysiert werden.');
-  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const json = (await res.json()) as GeminiGenerateContentResponse;
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new HttpError(422, 'Beleg konnte nicht ausgelesen werden.');
+  if (!text) throw new Error('Empty response');
+  return text;
+}
+
+// Retries the primary model up to `attempts` times with a random jitter delay between
+// attempts (transient overload/availability errors are common on a single model, so a
+// short retry loop resolves most of them before falling back to the secondary model).
+async function callGeminiWithRetry(
+  model: 'primary' | 'secondary',
+  modelId: string,
+  imageBase64: string,
+  mimeType: string,
+  attempts: number,
+  onProgress?: ReceiptParseProgressCallback,
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    onProgress?.({ model, attempt, attempts });
+    try {
+      return await callGemini(modelId, imageBase64, mimeType);
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts) {
+        await sleep(jitterDelay(RETRY_JITTER_MIN_MS, RETRY_JITTER_MAX_MS));
+      }
+    }
+  }
+  throw lastError;
+}
+
+export async function parseReceiptImage(
+  imageBase64: string,
+  mimeType: string,
+  onProgress?: ReceiptParseProgressCallback,
+): Promise<ParsedReceipt> {
+  if (!env.GEMINI_API_KEY) {
+    throw new HttpError(404, 'Beleg-Scan ist auf diesem Server nicht aktiviert.');
+  }
+
+  let text: string;
+  try {
+    try {
+      text = await callGeminiWithRetry(
+        'primary',
+        env.GEMINI_MODEL_PRIMARY,
+        imageBase64,
+        mimeType,
+        PRIMARY_MODEL_RETRY_ATTEMPTS,
+        onProgress,
+      );
+    } catch {
+      if (env.GEMINI_MODEL_PRIMARY === env.GEMINI_MODEL_SECONDARY) {
+        throw new Error('primary model failed');
+      }
+      text = await callGeminiWithRetry(
+        'secondary',
+        env.GEMINI_MODEL_SECONDARY,
+        imageBase64,
+        mimeType,
+        1,
+        onProgress,
+      );
+    }
+  } catch {
+    throw new HttpError(503, 'Beleg konnte nicht analysiert werden.');
   }
 
   let parsed: unknown;

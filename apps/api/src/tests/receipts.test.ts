@@ -22,6 +22,14 @@ vi.mock('../services/geminiReceiptService.js', () => ({
   })),
 }));
 
+function parseNdjson(payload: string): { type: string; [key: string]: unknown }[] {
+  return payload
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
 function buildMultipartBody(
   fieldName: string,
   filename: string,
@@ -109,19 +117,96 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
       url: `/api/groups/${groupId}/receipts/parse`,
       headers: {
         authorization: `Bearer ${token}`,
+        origin: 'http://localhost:5173',
         'content-type': `multipart/form-data; boundary=${boundary}`,
       },
       payload: body,
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({
-      storeName: 'Test Store',
-      date: '2026-06-01',
-      lineItems: [{ name: 'Item A', quantity: 1, priceCents: 1000 }],
-      subtotalCents: 1000,
-      grandTotalCents: 1000,
+    expect(res.headers['content-type']).toContain('application/x-ndjson');
+    // reply.hijack() bypasses Fastify's normal reply finalization, so headers staged
+    // by other plugins (like @fastify/cors) must be explicitly re-applied — regression
+    // test for a bug where the CORS header was silently dropped on this streamed route.
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    const events = parseNdjson(res.payload);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({
+      type: 'result',
+      data: {
+        storeName: 'Test Store',
+        date: '2026-06-01',
+        lineItems: [{ name: 'Item A', quantity: 1, priceCents: 1000 }],
+        subtotalCents: 1000,
+        grandTotalCents: 1000,
+      },
     });
+  });
+
+  it('streams progress events before the final result', async () => {
+    const { parseReceiptImage } = await import('../services/geminiReceiptService.js');
+    vi.mocked(parseReceiptImage).mockImplementationOnce(async (_b64, _mime, onProgress) => {
+      onProgress?.({ model: 'primary', attempt: 1, attempts: 3 });
+      onProgress?.({ model: 'secondary', attempt: 1, attempts: 1 });
+      return {
+        storeName: 'Test Store',
+        lineItems: [{ name: 'Item A', quantity: 1, priceCents: 1000 }],
+        grandTotalCents: 1000,
+      };
+    });
+
+    const { body, boundary } = buildMultipartBody(
+      'file',
+      'receipt.jpg',
+      'image/jpeg',
+      Buffer.from('fake-image-bytes'),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts/parse`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      payload: body,
+    });
+
+    const events = parseNdjson(res.payload);
+    expect(events).toHaveLength(3);
+    expect(events[0]).toEqual({ type: 'progress', model: 'primary', attempt: 1, attempts: 3 });
+    expect(events[1]).toEqual({ type: 'progress', model: 'secondary', attempt: 1, attempts: 1 });
+    expect(events[2].type).toBe('result');
+  });
+
+  it('streams an error event when parsing ultimately fails', async () => {
+    const { parseReceiptImage } = await import('../services/geminiReceiptService.js');
+    const { HttpError } = await import('../lib/HttpError.js');
+    vi.mocked(parseReceiptImage).mockRejectedValueOnce(
+      new HttpError(503, 'Beleg konnte nicht analysiert werden.'),
+    );
+
+    const { body, boundary } = buildMultipartBody(
+      'file',
+      'receipt.jpg',
+      'image/jpeg',
+      Buffer.from('fake-image-bytes'),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts/parse`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      payload: body,
+    });
+
+    const events = parseNdjson(res.payload);
+    expect(events).toEqual([
+      { type: 'error', status: 503, message: 'Beleg konnte nicht analysiert werden.' },
+    ]);
   });
 
   it('rejects non-image files with 400', async () => {
@@ -208,6 +293,161 @@ describe('POST /api/groups/:groupId/receipts', () => {
 
     const includedItem = body.lineItems.find((li: { excluded: boolean }) => !li.excluded);
     expect(includedItem.assignments).toHaveLength(2);
+  });
+
+  it('supports per-item exact split mode', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        storeName: 'Exact Split',
+        paidByUserId: ownerId,
+        date: '2026-06-01',
+        lineItems: [
+          {
+            name: 'Pizza',
+            quantity: 1,
+            priceCents: 1000,
+            excluded: false,
+            splitMode: 'exact',
+            assignments: [
+              { userId: ownerId, weight: 1, exactCents: 700 },
+              { userId: otherId, weight: 1, exactCents: 300 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.amountCents).toBe(1000);
+    const splits = body.splits as { userId: string; owedCents: number }[];
+    expect(splits.find((s) => s.userId === ownerId)?.owedCents).toBe(700);
+    expect(splits.find((s) => s.userId === otherId)?.owedCents).toBe(300);
+    expect(body.lineItems[0].splitMode).toBe('exact');
+  });
+
+  it('returns 422 when per-item exact amounts do not sum to the item price', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        storeName: 'Bad Exact Split',
+        paidByUserId: ownerId,
+        date: '2026-06-01',
+        lineItems: [
+          {
+            name: 'Pizza',
+            quantity: 1,
+            priceCents: 1000,
+            excluded: false,
+            splitMode: 'exact',
+            assignments: [
+              { userId: ownerId, weight: 1, exactCents: 700 },
+              { userId: otherId, weight: 1, exactCents: 100 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('supports per-item percent split mode', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        storeName: 'Percent Split',
+        paidByUserId: ownerId,
+        date: '2026-06-01',
+        lineItems: [
+          {
+            name: 'Wine',
+            quantity: 1,
+            priceCents: 2000,
+            excluded: false,
+            splitMode: 'percent',
+            assignments: [
+              { userId: ownerId, weight: 1, percent: 25 },
+              { userId: otherId, weight: 1, percent: 75 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    const splits = body.splits as { userId: string; owedCents: number }[];
+    expect(splits.find((s) => s.userId === ownerId)?.owedCents).toBe(500);
+    expect(splits.find((s) => s.userId === otherId)?.owedCents).toBe(1500);
+  });
+
+  it('returns 422 when per-item percentages do not sum to 100', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        storeName: 'Bad Percent Split',
+        paidByUserId: ownerId,
+        date: '2026-06-01',
+        lineItems: [
+          {
+            name: 'Wine',
+            quantity: 1,
+            priceCents: 2000,
+            excluded: false,
+            splitMode: 'percent',
+            assignments: [
+              { userId: ownerId, weight: 1, percent: 25 },
+              { userId: otherId, weight: 1, percent: 50 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+  });
+
+  it('supports per-item equal split mode', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/groups/${groupId}/receipts`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        storeName: 'Equal Split',
+        paidByUserId: ownerId,
+        date: '2026-06-01',
+        lineItems: [
+          {
+            name: 'Fries',
+            quantity: 1,
+            priceCents: 301,
+            excluded: false,
+            splitMode: 'equal',
+            assignments: [
+              { userId: ownerId, weight: 1 },
+              { userId: otherId, weight: 1 },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const splits = res.json().splits as { userId: string; owedCents: number }[];
+    const sum = splits.reduce((s, sp) => s + sp.owedCents, 0);
+    expect(sum).toBe(301);
+    // 301 split two ways: 150 + 151 (remainder on the last assignee)
+    expect(splits.map((s) => s.owedCents).sort()).toEqual([150, 151]);
   });
 
   it('returns 422 when an assignment references a non-member', async () => {

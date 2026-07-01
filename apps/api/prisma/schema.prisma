@@ -138,6 +138,7 @@ model ReceiptLineItem {
   priceCents  Int
   sortOrder   Int      @default(0)
   excluded    Boolean  @default(false)
+  splitMode   String   @default("shares") // 'equal' | 'exact' | 'percent' | 'shares'
   expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   assignments ReceiptLineItemAssignment[]
 
@@ -147,7 +148,9 @@ model ReceiptLineItem {
 model ReceiptLineItemAssignment {
   lineItemId  String
   userId      String
-  shareWeight Int             @default(1)
+  shareWeight Int             @default(1) // used when the item's splitMode is 'shares'
+  exactCents  Int? // used when the item's splitMode is 'exact'
+  percent     Float? // used when the item's splitMode is 'percent'
   lineItem    ReceiptLineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
 
   @@id([lineItemId, userId])

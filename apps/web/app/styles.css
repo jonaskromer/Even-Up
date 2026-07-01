@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes progress-bar-indeterminate {
+  0% {
+    transform: translateX(-100%) scaleX(0.4);
+  }
+  50% {
+    transform: translateX(20%) scaleX(0.6);
+  }
+  100% {
+    transform: translateX(120%) scaleX(0.4);
+  }
+}
+
 /* =========================================================================
    EvenUp — Tailwind CSS
    Color Palette: Stone / Sand + shadcn/ui CSS variables
@@ -95,6 +107,17 @@
 
   .app-container {
     @apply flex flex-col min-h-screen;
+  }
+
+  /* Indeterminate progress bar — used while waiting on a single long-running
+     request (e.g. receipt OCR) where no real percentage progress is available. */
+  .progress-bar-track {
+    @apply relative h-1.5 w-full overflow-hidden rounded-full bg-muted;
+  }
+
+  .progress-bar-fill {
+    @apply absolute inset-y-0 left-0 w-1/2 rounded-full bg-primary;
+    animation: progress-bar-indeterminate 1.4s ease-in-out infinite;
   }
 
   .site-header {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 // env.js is optional-gated on GEMINI_API_KEY; set it before the service (which
 // statically imports env.js) is ever loaded in this file's isolated module graph.
@@ -16,6 +16,23 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.restoreAllMocks();
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// Retries use a random jitter delay via setTimeout; fake timers let tests resolve
+// instantly instead of waiting on real (up to ~1.2s per retry) delays.
+async function runWithFakeTimers<T>(promiseFactory: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  const promise = promiseFactory();
+  // Attach a no-op handler immediately so Node doesn't flag the promise as an
+  // unhandled rejection while timers are being advanced below — the caller's own
+  // `await`/`.rejects` assertion still observes the same rejection normally.
+  promise.catch(() => {});
+  await vi.advanceTimersByTimeAsync(10000);
+  return promise;
+}
 
 function geminiResponse(obj: unknown): Response {
   return {
@@ -92,13 +109,101 @@ describe('parseReceiptImage', () => {
     await expect(parseReceiptImage('x', 'image/jpeg')).rejects.toMatchObject({ status: 422 });
   });
 
-  it('throws 503 on network failure', async () => {
-    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('network down'));
-    await expect(parseReceiptImage('x', 'image/jpeg')).rejects.toMatchObject({ status: 503 });
+  it('retries the primary model up to 3 times before falling back, with jitter delays between attempts', async () => {
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(
+        geminiResponse({
+          store_name: 'Rewe',
+          line_items: [{ name: 'Milch', quantity: 1, price: 1 }],
+          grand_total: 1,
+        }),
+      );
+
+    const result = await runWithFakeTimers(() => parseReceiptImage('x', 'image/jpeg'));
+
+    expect(result.storeName).toBe('Rewe');
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    // First 3 calls retried the primary model; the 4th fell back to the secondary.
+    expect((fetchSpy.mock.calls[0] as [string, RequestInit])[0]).toContain('gemini-3.5-flash');
+    expect((fetchSpy.mock.calls[1] as [string, RequestInit])[0]).toContain('gemini-3.5-flash');
+    expect((fetchSpy.mock.calls[2] as [string, RequestInit])[0]).toContain('gemini-3.5-flash');
+    expect((fetchSpy.mock.calls[3] as [string, RequestInit])[0]).toContain('gemini-2.5-flash');
   });
 
-  it('throws 503 when Gemini responds non-ok', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({ ok: false, status: 500 } as Response);
-    await expect(parseReceiptImage('x', 'image/jpeg')).rejects.toMatchObject({ status: 503 });
+  it('succeeds on a retry without falling back to the secondary model', async () => {
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(
+        geminiResponse({
+          store_name: 'Rewe',
+          line_items: [{ name: 'Milch', quantity: 1, price: 1 }],
+          grand_total: 1,
+        }),
+      );
+
+    const result = await runWithFakeTimers(() => parseReceiptImage('x', 'image/jpeg'));
+
+    expect(result.storeName).toBe('Rewe');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect((fetchSpy.mock.calls[0] as [string, RequestInit])[0]).toContain('gemini-3.5-flash');
+    expect((fetchSpy.mock.calls[1] as [string, RequestInit])[0]).toContain('gemini-3.5-flash');
+  });
+
+  it('throws 503 when the primary model (after retries) and the fallback both fail', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+
+    await expect(
+      runWithFakeTimers(() => parseReceiptImage('x', 'image/jpeg')),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('reports progress for each retry and the fallback attempt', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(
+        geminiResponse({
+          store_name: 'Rewe',
+          line_items: [{ name: 'Milch', quantity: 1, price: 1 }],
+          grand_total: 1,
+        }),
+      );
+
+    const onProgress = vi.fn();
+    await runWithFakeTimers(() => parseReceiptImage('x', 'image/jpeg', onProgress));
+
+    expect(onProgress.mock.calls.map((call) => call[0])).toEqual([
+      { model: 'primary', attempt: 1, attempts: 3 },
+      { model: 'primary', attempt: 2, attempts: 3 },
+      { model: 'primary', attempt: 3, attempts: 3 },
+    ]);
+  });
+
+  it('reports a secondary-model progress event when falling back', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(
+        geminiResponse({
+          store_name: 'Rewe',
+          line_items: [{ name: 'Milch', quantity: 1, price: 1 }],
+          grand_total: 1,
+        }),
+      );
+
+    const onProgress = vi.fn();
+    await runWithFakeTimers(() => parseReceiptImage('x', 'image/jpeg', onProgress));
+
+    expect(onProgress).toHaveBeenLastCalledWith({ model: 'secondary', attempt: 1, attempts: 1 });
   });
 });

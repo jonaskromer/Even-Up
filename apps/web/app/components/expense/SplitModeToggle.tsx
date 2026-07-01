@@ -37,17 +37,15 @@ export function SplitModeToggle({
     }, 0);
     const remainingCents = amountCents - totalEntered;
     const valid = remainingCents === 0 && amountCents > 0;
-    feedbackNode = (
-      <span className={valid ? 'text-green-600' : 'text-muted-foreground'}>
-        {valid
-          ? t('expense.splitMode.feedbackComplete')
-          : remainingCents > 0
-            ? t('expense.splitMode.feedbackExactRemaining', {
-                amount: (remainingCents / 100).toFixed(2),
-              })
-            : t('expense.splitMode.feedbackExactOver', {
-                amount: (Math.abs(remainingCents) / 100).toFixed(2),
-              })}
+    feedbackNode = valid ? null : (
+      <span className="text-muted-foreground">
+        {remainingCents > 0
+          ? t('expense.splitMode.feedbackExactRemaining', {
+              amount: (remainingCents / 100).toFixed(2),
+            })
+          : t('expense.splitMode.feedbackExactOver', {
+              amount: (Math.abs(remainingCents) / 100).toFixed(2),
+            })}
       </span>
     );
   } else if (mode === 'percent') {
@@ -57,13 +55,11 @@ export function SplitModeToggle({
     }, 0);
     const remaining = 100 - totalPct;
     const valid = Math.abs(remaining) < 0.05;
-    feedbackNode = (
-      <span className={valid ? 'text-green-600' : 'text-muted-foreground'}>
-        {valid
-          ? t('expense.splitMode.feedbackCompletePercent')
-          : remaining > 0
-            ? t('expense.splitMode.feedbackPctRemaining', { x: remaining.toFixed(1) })
-            : t('expense.splitMode.feedbackPctOver', { x: Math.abs(remaining).toFixed(1) })}
+    feedbackNode = valid ? null : (
+      <span className="text-muted-foreground">
+        {remaining > 0
+          ? t('expense.splitMode.feedbackPctRemaining', { x: remaining.toFixed(1) })
+          : t('expense.splitMode.feedbackPctOver', { x: Math.abs(remaining).toFixed(1) })}
       </span>
     );
   } else if (mode === 'shares') {
@@ -139,7 +135,9 @@ export function SplitModeToggle({
             );
           })}
 
-          <div className="pt-1 border-t border-border text-sm">{feedbackNode}</div>
+          {feedbackNode && (
+            <div className="pt-1 border-t border-border text-sm">{feedbackNode}</div>
+          )}
         </div>
       )}
     </div>

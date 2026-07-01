@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
-import { Member, ReceiptDraftLineItem } from '../../types';
+import { useMemo, type ReactNode } from 'react';
+import { Member, ReceiptDraftLineItem, SplitMode } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
 import { formatCurrency, cn } from '../../lib/utils';
-import { computeReceiptSplits, receiptTotalCents } from '../../lib/receiptSplits';
+import { computeReceiptSplits, isItemSplitValid, receiptTotalCents } from '../../lib/receiptSplits';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -17,6 +17,30 @@ interface ReceiptLineItemReviewProps {
   currency: string;
   onContinue: () => void;
   onCancel: () => void;
+}
+
+// Prefills a sensible default per assignee when a line item's split mode changes,
+// mirroring AddExpenseForm's prefillSplitInputs — otherwise switching to 'exact'/
+// 'percent' would start from a nonsensical all-zero state that reads as broken.
+function prefillForMode(
+  mode: SplitMode,
+  assignments: ReceiptDraftLineItem['assignments'],
+  priceCents: number,
+): ReceiptDraftLineItem['assignments'] {
+  const n = assignments.length;
+  if (n === 0) return assignments;
+  if (mode === 'exact') {
+    const share = Math.round(priceCents / n);
+    return assignments.map((a) => ({ ...a, exactCents: share }));
+  }
+  if (mode === 'percent') {
+    const share = Math.round((100 / n) * 10) / 10;
+    return assignments.map((a) => ({ ...a, percent: share }));
+  }
+  if (mode === 'shares') {
+    return assignments.map((a) => ({ ...a, weight: 1 }));
+  }
+  return assignments;
 }
 
 export function ReceiptLineItemReview({
@@ -40,8 +64,24 @@ export function ReceiptLineItemReview({
     const has = item.assignments.some((a) => a.userId === userId);
     const assignments = has
       ? item.assignments.filter((a) => a.userId !== userId)
-      : [...item.assignments, { userId, weight: 1 }];
+      : [
+          ...item.assignments,
+          {
+            userId,
+            weight: 1,
+            exactCents: item.splitMode === 'exact' ? 0 : undefined,
+            percent: item.splitMode === 'percent' ? 0 : undefined,
+          },
+        ];
     updateItem(index, { assignments });
+  }
+
+  function handleSplitModeChange(index: number, mode: SplitMode) {
+    const item = lineItems[index];
+    updateItem(index, {
+      splitMode: mode,
+      assignments: prefillForMode(mode, item.assignments, item.priceCents),
+    });
   }
 
   function adjustWeight(index: number, userId: string, delta: number) {
@@ -52,13 +92,54 @@ export function ReceiptLineItemReview({
     updateItem(index, { assignments });
   }
 
+  function updateExactCents(index: number, userId: string, euros: string) {
+    const item = lineItems[index];
+    const value = Number.parseFloat(euros.replace(',', '.'));
+    const cents = Number.isNaN(value) ? 0 : Math.round(value * 100);
+    const assignments = item.assignments.map((a) =>
+      a.userId === userId ? { ...a, exactCents: cents } : a,
+    );
+    updateItem(index, { assignments });
+  }
+
+  function updatePercent(index: number, userId: string, raw: string) {
+    const item = lineItems[index];
+    const value = Number.parseFloat(raw.replace(',', '.'));
+    const percent = Number.isNaN(value) ? 0 : value;
+    const assignments = item.assignments.map((a) => (a.userId === userId ? { ...a, percent } : a));
+    updateItem(index, { assignments });
+  }
+
   function toggleExcluded(index: number) {
     updateItem(index, { excluded: !lineItems[index].excluded });
   }
 
+  function itemFeedback(item: ReceiptDraftLineItem): ReactNode {
+    if (item.splitMode === 'exact') {
+      const sum = item.assignments.reduce((s, a) => s + (a.exactCents ?? 0), 0);
+      const remaining = item.priceCents - sum;
+      if (remaining === 0) return null;
+      return remaining > 0
+        ? t('expense.splitMode.feedbackExactRemaining', { amount: (remaining / 100).toFixed(2) })
+        : t('expense.splitMode.feedbackExactOver', {
+            amount: (Math.abs(remaining) / 100).toFixed(2),
+          });
+    }
+    if (item.splitMode === 'percent') {
+      const totalPct = item.assignments.reduce((s, a) => s + (a.percent ?? 0), 0);
+      const remaining = 100 - totalPct;
+      if (Math.abs(remaining) < 0.05) return null;
+      return remaining > 0
+        ? t('expense.splitMode.feedbackPctRemaining', { x: remaining.toFixed(1) })
+        : t('expense.splitMode.feedbackPctOver', { x: Math.abs(remaining).toFixed(1) });
+    }
+    return null;
+  }
+
   const memberTotals = useMemo(() => computeReceiptSplits(lineItems), [lineItems]);
   const totalCents = useMemo(() => receiptTotalCents(lineItems), [lineItems]);
-  const canContinue = totalCents > 0 && memberTotals.length > 0;
+  const allItemsValid = lineItems.every(isItemSplitValid);
+  const canContinue = totalCents > 0 && memberTotals.length > 0 && allItemsValid;
 
   return (
     <main className="main-content max-w-[640px]">
@@ -141,36 +222,104 @@ export function ReceiptLineItemReview({
                     })}
                   </div>
 
-                  {item.assignments.length >= 2 && (
-                    <div className="space-y-1 pt-1">
-                      <p className="text-xs text-muted-foreground">{t('receipt.weightLabel')}</p>
-                      {item.assignments.map((a) => {
-                        const member = members.find((m) => m.id === a.userId);
-                        return (
-                          <div key={a.userId} className="flex items-center gap-2 text-sm">
-                            <span className="flex-1">{member?.name ?? a.userId}</span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => adjustWeight(i, a.userId, -1)}
-                            >
-                              −
-                            </Button>
-                            <span className="w-4 text-center tabular-nums">{a.weight}</span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => adjustWeight(i, a.userId, 1)}
-                            >
-                              +
-                            </Button>
-                          </div>
-                        );
-                      })}
+                  {item.assignments.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <select
+                        aria-label={t('receipt.splitModeLabel')}
+                        className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                        value={item.splitMode}
+                        onChange={(e) => handleSplitModeChange(i, e.target.value as SplitMode)}
+                      >
+                        <option value="equal">
+                          {t('expense.splitMode.equal', { n: item.assignments.length })}
+                        </option>
+                        <option value="exact">{t('expense.splitMode.exact')}</option>
+                        <option value="percent">{t('expense.splitMode.percent')}</option>
+                        <option value="shares">{t('expense.splitMode.shares')}</option>
+                      </select>
+
+                      {item.splitMode === 'shares' && (
+                        <div className="space-y-1">
+                          {item.assignments.map((a) => {
+                            const member = members.find((m) => m.id === a.userId);
+                            return (
+                              <div key={a.userId} className="flex items-center gap-2 text-sm">
+                                <span className="flex-1 truncate">{member?.name ?? a.userId}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => adjustWeight(i, a.userId, -1)}
+                                >
+                                  −
+                                </Button>
+                                <span className="w-4 text-center tabular-nums">{a.weight}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => adjustWeight(i, a.userId, 1)}
+                                >
+                                  +
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {item.splitMode === 'exact' && (
+                        <div className="space-y-1">
+                          {item.assignments.map((a) => {
+                            const member = members.find((m) => m.id === a.userId);
+                            return (
+                              <div key={a.userId} className="flex items-center gap-2 text-sm">
+                                <span className="flex-1 truncate">{member?.name ?? a.userId}</span>
+                                <span className="text-muted-foreground text-xs">€</span>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  className="w-24 h-8 text-sm"
+                                  value={((a.exactCents ?? 0) / 100).toFixed(2)}
+                                  onChange={(e) => updateExactCents(i, a.userId, e.target.value)}
+                                />
+                              </div>
+                            );
+                          })}
+                          {itemFeedback(item) && (
+                            <p className="text-xs text-muted-foreground">{itemFeedback(item)}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {item.splitMode === 'percent' && (
+                        <div className="space-y-1">
+                          {item.assignments.map((a) => {
+                            const member = members.find((m) => m.id === a.userId);
+                            return (
+                              <div key={a.userId} className="flex items-center gap-2 text-sm">
+                                <span className="flex-1 truncate">{member?.name ?? a.userId}</span>
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  max="100"
+                                  className="w-24 h-8 text-sm"
+                                  value={a.percent ?? 0}
+                                  onChange={(e) => updatePercent(i, a.userId, e.target.value)}
+                                />
+                                <span className="text-muted-foreground text-xs">%</span>
+                              </div>
+                            );
+                          })}
+                          {itemFeedback(item) && (
+                            <p className="text-xs text-muted-foreground">{itemFeedback(item)}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { api, ApiError } from '../lib/apiClient';
 import { AddExpenseForm } from '../components/expense/AddExpenseForm';
 import { Button } from '../components/ui/button';
+import { Alert, AlertDescription } from '../components/ui/alert';
 import type { Expense, Group, NewExpenseInput } from '../types';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
@@ -58,42 +59,43 @@ export default function EditExpenseRoute({ loaderData }: Route.ComponentProps) {
   const hasLineItems = (expense.lineItems?.length ?? 0) > 0;
 
   return (
-    <>
-      {hasLineItems && (
-        <div className="max-w-[600px] mx-auto px-4 pt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/groups/${group.id}/receipt?expenseId=${expense.id}`)}
-          >
-            {t('receipt.editLineItemsButton')}
-          </Button>
-        </div>
-      )}
-      <AddExpenseForm
-        group={group}
-        submitting={submitting}
-        submitError={submitError}
-        onCancel={() => navigate(`/groups/${group.id}`)}
-        onSubmit={(input) => void handleSubmit(input)}
-        title={t('expense.form.editTitle')}
-        subtitle={t('expense.form.editSubtitle', {
-          expense: expense.description,
-          group: group.name,
-        })}
-        defaults={{
-          description: expense.description,
-          amountCents: expense.amountCents,
-          originalAmountCents: expense.originalAmountCents,
-          originalCurrency: expense.originalCurrency,
-          appliedMarkupRate: expense.appliedMarkupRate,
-          paidByUserId: expense.paidByUserId,
-          splitMode: expense.splitMode,
-          date: expense.date,
-          splits: expense.splits,
-        }}
-        defaultMarkupRate={defaultMarkupRate}
-      />
-    </>
+    <AddExpenseForm
+      group={group}
+      submitting={submitting}
+      submitError={submitError}
+      onCancel={() => navigate(`/groups/${group.id}`)}
+      onSubmit={(input) => void handleSubmit(input)}
+      title={t('expense.form.editTitle')}
+      subtitle={t('expense.form.editSubtitle', {
+        expense: expense.description,
+        group: group.name,
+      })}
+      banner={
+        hasLineItems ? (
+          <Alert className="flex items-center justify-between gap-3 flex-wrap">
+            <AlertDescription>{t('receipt.editLineItemsHint')}</AlertDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/groups/${group.id}/receipt?expenseId=${expense.id}`)}
+            >
+              {t('receipt.editLineItemsButton')}
+            </Button>
+          </Alert>
+        ) : undefined
+      }
+      defaults={{
+        description: expense.description,
+        amountCents: expense.amountCents,
+        originalAmountCents: expense.originalAmountCents,
+        originalCurrency: expense.originalCurrency,
+        appliedMarkupRate: expense.appliedMarkupRate,
+        paidByUserId: expense.paidByUserId,
+        splitMode: expense.splitMode,
+        date: expense.date,
+        splits: expense.splits,
+      }}
+      defaultMarkupRate={defaultMarkupRate}
+    />
   );
 }

@@ -27,12 +27,40 @@ Requirements:
 
 ## Decision
 
-### AI provider: Google Gemini (`gemini-3.5-flash`), model configurable via env var
+### AI provider: Google Gemini, primary/secondary models configurable via env vars
 
 The image is sent inline (base64) to Gemini's `generateContent` REST API with a vision
-content part. The exact model string is stored in `GEMINI_MODEL` (default
-`gemini-3.5-flash`) rather than hardcoded, so it can be bumped without a code change if
-the model identifier changes.
+content part. Two model strings are configurable rather than hardcoded:
+`GEMINI_MODEL_PRIMARY` (default `gemini-3.5-flash`) and `GEMINI_MODEL_SECONDARY`
+(default `gemini-2.5-flash`), so either can be bumped without a code change. Both
+defaults were verified directly against the Gemini API with vision input and
+`responseSchema` structured output before settling on them.
+
+### Retry-then-fallback on transient failures
+
+The primary model is retried up to 3 times, with a random jitter delay (300–1200ms)
+between attempts, before falling back to the secondary model once. This absorbs the
+common case of a transient `503` (model overloaded) or network hiccup without ever
+bothering the secondary model unnecessarily; the secondary is only used once the
+primary has been given several chances to succeed. Only if both the retried primary
+and the single fallback attempt fail does the endpoint surface a `503` to the client.
+
+### Streamed retry/fallback progress (NDJSON over the same request)
+
+With up to 3 retries plus a fallback attempt, a single parse can now take anywhere
+from a couple of seconds to several minutes — a static "processing…" spinner gives no
+signal about what's actually happening. Rather than adding a second connection (SSE,
+WebSocket) or a polling status endpoint, `POST /receipts/parse` streams
+newline-delimited JSON over the *same* request/response: `reply.hijack()` +
+`reply.raw` write a `{type:'progress', model, attempt, attempts}` line before each
+Gemini call, then a final `{type:'result', data}` or `{type:'error', status, message}`
+line. The frontend reads `response.body` with a `ReadableStream` reader
+(`postFileStream` in `apiClient.ts`), updating the processing screen's message live
+("Retrying (2/3)…", "Using backup model…") as events arrive, and resolving/rejecting
+based on the terminal event. This keeps the feature to one HTTP request with no new
+infrastructure (no SSE library, no second endpoint to poll), at the cost of the
+response no longer being a single parseable JSON body — callers must consume it as a
+line stream.
 
 ### Native structured output over prompt-only JSON instructions
 
@@ -72,10 +100,11 @@ queried back for editing. Instead, two new tables mirror `ExpenseSplit`'s existi
 normalized, cascade-deleted style:
 
 - `ReceiptLineItem` (`expenseId` FK cascade, `name`, `quantity`, `priceCents`,
-  `sortOrder`, `excluded`).
+  `sortOrder`, `excluded`, `splitMode`).
 - `ReceiptLineItemAssignment` (`lineItemId` FK cascade, `userId` — plain string, **no**
   FK to `User`, matching `ExpenseSplit.userId`'s existing convention so account
-  deletion isn't blocked by receipt-assignment rows — `shareWeight`).
+  deletion isn't blocked by receipt-assignment rows — `shareWeight`, `exactCents`,
+  `percent`).
 
 `shareWeight` is stored as an integer weight (default 1), not a pre-computed
 `owedCents` amount. If the assignment stored cents directly, any later correction
@@ -83,12 +112,39 @@ would risk stale totals that no longer sum to the item price. Storing weights me
 per-user cents are always *derived* at save/read time as
 `priceCents × memberWeight / sum(weightsForThatItem)` — naturally idempotent, and
 supports "one person ate it alone," "equal three-way split," and "double portion"
-without special-casing.
+without special-casing. `exactCents`/`percent` are nullable siblings used only when
+the item's `splitMode` is `'exact'`/`'percent'` respectively (see below).
 
 Excluding a line item (`excluded: true`) keeps its row and assignments in the database
 untouched — it simply contributes nothing to the expense total or any split. Toggling
 it back on in the editor restores whatever assignment it had before, since nothing was
 discarded.
+
+### Per-item split modes: equal / exact / percent / shares
+
+The initial version only supported a "shares" (weighted) split per item. Users asked
+for the same four modes already available for the whole expense
+(`expense.splitMode`: `equal`, `exact`, `percent`, `shares`), scoped to individual line
+items — e.g. "this pizza: I paid exactly €7, they paid €3" rather than only
+proportional weights. `ReceiptLineItem.splitMode` selects the mode; the mode-specific
+value lives on the assignment (`shareWeight` for `'shares'`, `exactCents` for
+`'exact'`, `percent` for `'percent'`; `'equal'` needs no extra value, it just divides
+the item price by the assignee count). `computeSingleItemSplit` in `receipts.ts`
+switches on this per item and validates each mode's invariant with the same tolerance
+convention used elsewhere (`computeAndValidateSplits`'s `±memberCount` cents,
+`±0.5` percentage points) — throwing `HttpError(422, ...)` naming the offending item
+if `exact` amounts don't sum to the item price or `percent` values don't sum to 100.
+The frontend's `lib/receiptSplits.ts` mirrors this exact computation (including the
+"remainder to the last assignee" rounding convention) so the review screen's live
+totals always match what the server will persist.
+
+This intentionally does not reuse the top-level expense form's `SplitModeToggle`
+component — that component's API is built around a single flat member list and a
+`Record<userId, string>` input map, whereas each line item needs its own independent
+mode, assignee subset, and price scope. The correctness-critical split math is shared
+(mirrored) between `apps/api/src/routes/receipts.ts` and
+`apps/web/app/lib/receiptSplits.ts`; the UI is a smaller, purpose-built rendering of
+the same four modes rather than a forced reuse.
 
 ### Reuse of the existing exact-split pipeline, not a parallel one
 
@@ -120,6 +176,16 @@ shadcn `Dialog` primitive exists yet, and the closest existing analog
 URL changes between steps, so an in-progress capture isn't lost to back-navigation.
 The final "confirm" step reuses the existing `AddExpenseForm` (via its `defaults`
 prop) for payer/date/currency/markup editing, getting that functionality for free.
+
+### `AddExpenseForm`'s `banner` slot for the "Edit line items" entry point
+
+The edit page's "Edit line items" call-to-action was initially rendered in its own
+`<div>` above `<AddExpenseForm>`, outside that component's own page header — it read as
+a disconnected, easy-to-miss element rather than part of the page. `AddExpenseForm`
+now accepts an optional `banner?: ReactNode` rendered between the page title and the
+form card, so the edit route can pass an `Alert` with the "this expense came from a
+receipt" hint and the edit-line-items button as a single, properly integrated part of
+the page layout instead of a second ad-hoc header.
 
 ## Consequences
 

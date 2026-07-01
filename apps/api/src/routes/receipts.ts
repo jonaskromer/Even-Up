@@ -19,9 +19,73 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/heif',
 ]);
 
-// Splits each non-excluded line item's priceCents across its assignees proportional to
-// weight (rounding drift patched onto the last assignee), then aggregates the result
-// into one exactSplits-shaped array per user across all line items.
+type ReceiptLineItemInput = CreateReceiptExpenseInput['lineItems'][number];
+
+// Splits a single line item's priceCents across its assignees according to its own
+// splitMode — mirrors the top-level expense's equal/exact/percent/shares modes, but
+// scoped to one item's price and its assigned members. Any rounding drift is patched
+// onto the last assignee, same convention used everywhere else in this app.
+function computeSingleItemSplit(
+  item: ReceiptLineItemInput,
+): { userId: string; owedCents: number }[] {
+  const n = item.assignments.length;
+  if (n === 0) return [];
+
+  if (item.splitMode === 'exact') {
+    const sum = item.assignments.reduce((s, a) => s + (a.exactCents ?? 0), 0);
+    if (Math.abs(sum - item.priceCents) > n) {
+      throw new HttpError(
+        422,
+        `Die exakten Beträge für "${item.name}" (${sum} ct) weichen vom Positionspreis (${item.priceCents} ct) ab.`,
+      );
+    }
+    return item.assignments.map((a) => ({ userId: a.userId, owedCents: a.exactCents ?? 0 }));
+  }
+
+  if (item.splitMode === 'percent') {
+    const totalPct = item.assignments.reduce((s, a) => s + (a.percent ?? 0), 0);
+    if (Math.abs(totalPct - 100) > 0.5) {
+      throw new HttpError(
+        422,
+        `Die Prozentsätze für "${item.name}" (${totalPct}%) ergeben nicht 100%.`,
+      );
+    }
+    let allocated = 0;
+    return item.assignments.map((a, i) => {
+      const isLast = i === n - 1;
+      const owedCents = isLast
+        ? item.priceCents - allocated
+        : Math.round((item.priceCents * (a.percent ?? 0)) / 100);
+      allocated += owedCents;
+      return { userId: a.userId, owedCents };
+    });
+  }
+
+  if (item.splitMode === 'equal') {
+    const base = Math.floor(item.priceCents / n);
+    const remainder = item.priceCents - base * n;
+    return item.assignments.map((a, i) => ({
+      userId: a.userId,
+      owedCents: base + (i === n - 1 ? remainder : 0),
+    }));
+  }
+
+  // 'shares'
+  const totalWeight = item.assignments.reduce((sum, a) => sum + a.weight, 0);
+  if (totalWeight === 0) return [];
+  let allocated = 0;
+  return item.assignments.map((a, i) => {
+    const isLast = i === n - 1;
+    const owedCents = isLast
+      ? item.priceCents - allocated
+      : Math.round((item.priceCents * a.weight) / totalWeight);
+    allocated += owedCents;
+    return { userId: a.userId, owedCents };
+  });
+}
+
+// Aggregates every non-excluded line item's per-assignee split into one
+// exactSplits-shaped array per user across all line items.
 function computeLineItemSplits(
   lineItems: CreateReceiptExpenseInput['lineItems'],
 ): { userId: string; owedCents: number }[] {
@@ -29,18 +93,9 @@ function computeLineItemSplits(
 
   for (const item of lineItems) {
     if (item.excluded) continue;
-    const totalWeight = item.assignments.reduce((sum, a) => sum + a.weight, 0);
-    if (totalWeight === 0) continue;
-
-    let allocated = 0;
-    item.assignments.forEach((a, i) => {
-      const isLast = i === item.assignments.length - 1;
-      const share = isLast
-        ? item.priceCents - allocated
-        : Math.round((item.priceCents * a.weight) / totalWeight);
-      allocated += share;
-      totals.set(a.userId, (totals.get(a.userId) ?? 0) + share);
-    });
+    for (const s of computeSingleItemSplit(item)) {
+      totals.set(s.userId, (totals.get(s.userId) ?? 0) + s.owedCents);
+    }
   }
 
   return Array.from(totals.entries()).map(([userId, owedCents]) => ({ userId, owedCents }));
@@ -54,7 +109,7 @@ export async function receiptRoutes(app: FastifyInstance) {
   app.post(
     '/groups/:groupId/receipts/parse',
     { preHandler: [requireAuth, requireGroupMember] },
-    async (req) => {
+    async (req, reply) => {
       if (!isReceiptParsingEnabled()) {
         throw new HttpError(404, 'Beleg-Scan ist auf diesem Server nicht aktiviert.');
       }
@@ -66,8 +121,43 @@ export async function receiptRoutes(app: FastifyInstance) {
       }
 
       const buffer = await file.toBuffer();
-      const parsed = await parseReceiptImage(buffer.toString('base64'), file.mimetype);
-      return parsed;
+
+      // Validation above still goes through Fastify's normal JSON error handling.
+      // From here on, the response is streamed as newline-delimited JSON so the
+      // client can show real retry/fallback progress while Gemini is still running —
+      // reply.hijack() tells Fastify not to also try to send its own response.
+      // reply.getHeaders() must be captured explicitly: hijacking skips Fastify's
+      // normal reply-finalization, so headers staged by other plugins (notably
+      // @fastify/cors's Access-Control-Allow-Origin, set via reply.header()) would
+      // otherwise never be flushed to the raw response and the browser would reject
+      // the cross-origin request outright.
+      const priorHeaders = reply.getHeaders();
+      reply.hijack();
+      for (const [key, value] of Object.entries(priorHeaders)) {
+        if (value !== undefined) reply.raw.setHeader(key, value);
+      }
+      reply.raw.writeHead(200, {
+        'Content-Type': 'application/x-ndjson',
+        'Cache-Control': 'no-cache',
+      });
+      const writeEvent = (event: Record<string, unknown>) => {
+        reply.raw.write(`${JSON.stringify(event)}\n`);
+      };
+
+      try {
+        const parsed = await parseReceiptImage(
+          buffer.toString('base64'),
+          file.mimetype,
+          (progress) => writeEvent({ type: 'progress', ...progress }),
+        );
+        writeEvent({ type: 'result', data: parsed });
+      } catch (err) {
+        const status = err instanceof HttpError ? err.status : 500;
+        const message = err instanceof Error ? err.message : 'Unbekannter Fehler';
+        writeEvent({ type: 'error', status, message });
+      } finally {
+        reply.raw.end();
+      }
     },
   );
 
@@ -148,9 +238,15 @@ export async function receiptRoutes(app: FastifyInstance) {
               priceCents: li.priceCents,
               excluded: li.excluded,
               sortOrder: i,
+              splitMode: li.splitMode,
               assignments: {
                 createMany: {
-                  data: li.assignments.map((a) => ({ userId: a.userId, shareWeight: a.weight })),
+                  data: li.assignments.map((a) => ({
+                    userId: a.userId,
+                    shareWeight: a.weight,
+                    exactCents: a.exactCents,
+                    percent: a.percent,
+                  })),
                 },
               },
             })),
@@ -261,9 +357,15 @@ export async function receiptRoutes(app: FastifyInstance) {
               priceCents: li.priceCents,
               excluded: li.excluded,
               sortOrder: i,
+              splitMode: li.splitMode,
               assignments: {
                 createMany: {
-                  data: li.assignments.map((a) => ({ userId: a.userId, shareWeight: a.weight })),
+                  data: li.assignments.map((a) => ({
+                    userId: a.userId,
+                    shareWeight: a.weight,
+                    exactCents: a.exactCents,
+                    percent: a.percent,
+                  })),
                 },
               },
             })),

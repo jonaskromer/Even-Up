@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import type { Route } from './+types/groups.$groupId_.receipt';
 import { requireAuth } from '../lib/requireAuth';
 import { useLanguage } from '../context/LanguageContext';
-import { api, ApiError } from '../lib/apiClient';
+import { api, ApiError, postFileStream } from '../lib/apiClient';
 import { AddExpenseForm } from '../components/expense/AddExpenseForm';
 import { ReceiptUploadStep } from '../components/receipt/ReceiptUploadStep';
 import { ReceiptProcessingStep } from '../components/receipt/ReceiptProcessingStep';
@@ -15,14 +15,19 @@ import type {
   NewExpenseInput,
   ParsedReceipt,
   ReceiptDraftLineItem,
+  ReceiptParseProgress,
 } from '../types';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const expenseId = new URLSearchParams(window.location.search).get('expenseId');
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
+  // Use the loader's own request URL, not window.location — the browser's address bar
+  // hasn't necessarily updated to the destination URL yet while the loader is running,
+  // so window.location.search could still reflect the *previous* page and silently
+  // drop the expenseId param, sending the user to the upload screen instead of review.
+  const expenseId = new URL(request.url).searchParams.get('expenseId');
   const [user, group, expense] = await Promise.all([
     requireAuth(),
     api.get<Group>(`/api/groups/${params.groupId}`),
@@ -59,7 +64,13 @@ function receiptLineItemsFromExpense(expense: Expense): ReceiptDraftLineItem[] {
     quantity: li.quantity,
     priceCents: li.priceCents,
     excluded: li.excluded,
-    assignments: li.assignments.map((a) => ({ userId: a.userId, weight: a.weight })),
+    splitMode: li.splitMode,
+    assignments: li.assignments.map((a) => ({
+      userId: a.userId,
+      weight: a.weight,
+      exactCents: a.exactCents,
+      percent: a.percent,
+    })),
   }));
 }
 
@@ -79,6 +90,7 @@ export default function ReceiptRoute({ loaderData }: Route.ComponentProps) {
       : { step: 'upload' },
   );
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [parseProgress, setParseProgress] = useState<ReceiptParseProgress | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -88,13 +100,15 @@ export default function ReceiptRoute({ loaderData }: Route.ComponentProps) {
 
   async function handleFileSelected(file: File) {
     setUploadError(null);
+    setParseProgress(null);
     setScreen({ step: 'processing' });
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const parsed = await api.postFile<ParsedReceipt>(
+      const parsed = await postFileStream<ReceiptParseProgress, ParsedReceipt>(
         `/api/groups/${group.id}/receipts/parse`,
         formData,
+        setParseProgress,
       );
       setScreen({
         step: 'review',
@@ -105,6 +119,7 @@ export default function ReceiptRoute({ loaderData }: Route.ComponentProps) {
           quantity: li.quantity,
           priceCents: li.priceCents,
           excluded: false,
+          splitMode: 'shares' as const,
           assignments: group.members.map((m) => ({ userId: m.id, weight: 1 })),
         })),
       });
@@ -181,7 +196,7 @@ export default function ReceiptRoute({ loaderData }: Route.ComponentProps) {
   }
 
   if (screen.step === 'processing') {
-    return <ReceiptProcessingStep />;
+    return <ReceiptProcessingStep progress={parseProgress} />;
   }
 
   if (screen.step === 'review') {

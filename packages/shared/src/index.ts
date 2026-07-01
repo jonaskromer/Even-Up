@@ -19,7 +19,9 @@ export {
   geminiReceiptResultSchema,
   createReceiptExpenseSchema,
   updateReceiptExpenseSchema,
+  lineItemSplitModeSchema,
   type GeminiReceiptResult,
   type CreateReceiptExpenseInput,
   type UpdateReceiptExpenseInput,
+  type LineItemSplitMode,
 } from './schemas/receipt.js';
