@@ -32,6 +32,9 @@ services:
       APP_URL: ${APP_URL:-https://${DOMAIN:-localhost}}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL_PRIMARY: ${GEMINI_MODEL_PRIMARY:-gemini-3.5-flash}
+      GEMINI_MODEL_SECONDARY: ${GEMINI_MODEL_SECONDARY:-gemini-2.5-flash}
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '-', 'http://127.0.0.1:4000/api/health']
       interval: 5s
