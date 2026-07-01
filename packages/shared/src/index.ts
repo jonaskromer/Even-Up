@@ -14,3 +14,12 @@ export {
 } from './schemas/group.js';
 
 export { createSettlementSchema, type CreateSettlementInput } from './schemas/settlement.js';
+
+export {
+  geminiReceiptResultSchema,
+  createReceiptExpenseSchema,
+  updateReceiptExpenseSchema,
+  type GeminiReceiptResult,
+  type CreateReceiptExpenseInput,
+  type UpdateReceiptExpenseInput,
+} from './schemas/receipt.js';

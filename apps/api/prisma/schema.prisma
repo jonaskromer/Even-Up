@@ -60,11 +60,13 @@ model Expense {
   paidByUserId        String
   date                DateTime
   splitMode           String         @default("equal")
+  receiptStoreName    String?
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   group               Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
   paidBy              User           @relation("PaidBy", fields: [paidByUserId], references: [id])
   splits              ExpenseSplit[]
+  lineItems           ReceiptLineItem[]
 }
 
 model ExpenseSplit {
@@ -126,6 +128,29 @@ model GroupJoinRequest {
 
   @@index([invitedUserId, status])
   @@index([groupId, status])
+}
+
+model ReceiptLineItem {
+  id          String   @id @default(cuid())
+  expenseId   String
+  name        String
+  quantity    Float    @default(1)
+  priceCents  Int
+  sortOrder   Int      @default(0)
+  excluded    Boolean  @default(false)
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  assignments ReceiptLineItemAssignment[]
+
+  @@index([expenseId])
+}
+
+model ReceiptLineItemAssignment {
+  lineItemId  String
+  userId      String
+  shareWeight Int             @default(1)
+  lineItem    ReceiptLineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  @@id([lineItemId, userId])
 }
 
 model ExchangeRate {

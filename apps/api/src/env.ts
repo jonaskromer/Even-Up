@@ -19,6 +19,10 @@ const envSchema = z.object({
   EMAIL_FROM: optionalString(),
   APP_URL: optionalUrl(),
   CORS_ORIGIN: optionalString(),
+  // Receipt-upload AI parsing (Gemini). Optional — the feature is hidden client-side
+  // and the parse endpoint 404s when unset, same graceful-degrade pattern as Resend.
+  GEMINI_API_KEY: optionalString(),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
 });
 
 export const env = envSchema.parse(process.env);

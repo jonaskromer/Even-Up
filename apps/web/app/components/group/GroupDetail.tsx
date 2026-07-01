@@ -88,6 +88,16 @@ export function GroupDetail({
           <nav className="user-nav">
             <PendingInvitationsBell />
             <ImportExpensesButton group={group} onImported={onRevalidate} />
+            {group.receiptsEnabled && (
+              <Link to={`/groups/${group.id}/receipt`}>
+                <Button size="sm" variant="outline">
+                  <span className="hidden sm:inline">{t('receipt.button')}</span>
+                  <span className="sm:hidden" aria-label={t('receipt.button')}>
+                    {t('receipt.buttonShort')}
+                  </span>
+                </Button>
+              </Link>
+            )}
             <Link to={`/groups/${group.id}/new-expense`}>
               <Button size="sm">
                 <span className="hidden sm:inline">{t('group.addExpense')}</span>
