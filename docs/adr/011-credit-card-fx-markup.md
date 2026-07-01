@@ -12,7 +12,7 @@ ECB rate as the converted amount but their card actually charged a higher rate, 
 recorded expense is slightly lower than what they actually paid, and the resulting
 settlement is inaccurate.
 
-Users asked for a way to account for this markup so that the amounts in EvenUp reflect
+Users asked for a way to account for this markup so that the amounts in Even-Up reflect
 their real card charges rather than the raw ECB rate.
 
 Requirements:

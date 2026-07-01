@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-EvenUp previously stored all monetary values in a single implied currency (EUR). Groups
+Even-Up previously stored all monetary values in a single implied currency (EUR). Groups
 shared among people from different countries — or trips abroad — could not record
 expenses in a foreign currency without manually converting amounts. The grading
 rubric lists multi-currency support as a stretch goal.

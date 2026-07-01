@@ -1,7 +1,7 @@
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <p>EvenUp</p>
+      <p>Even-Up</p>
     </footer>
   );
 }

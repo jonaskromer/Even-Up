@@ -45,7 +45,7 @@ export default function InviteRoute({ loaderData }: Route.ComponentProps) {
       <header className="site-header">
         <div className="header-content">
           <Link to="/" className="brand">
-            EvenUp
+            Even-Up
           </Link>
         </div>
       </header>

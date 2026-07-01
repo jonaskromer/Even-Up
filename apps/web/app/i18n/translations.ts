@@ -1,6 +1,6 @@
 export const de = {
   meta: {
-    description: 'EvenUp - Gemeinsame Ausgaben einfach aufteilen',
+    description: 'Even-Up - Gemeinsame Ausgaben einfach aufteilen',
     loading: 'Laden…',
   },
   common: {
@@ -362,7 +362,7 @@ export const de = {
 
 export const en: typeof de = {
   meta: {
-    description: 'EvenUp - Split shared expenses easily',
+    description: 'Even-Up - Split shared expenses easily',
     loading: 'Loading…',
   },
   common: {

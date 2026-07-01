@@ -18,31 +18,31 @@ const DEMO_USER_IDS = {
 
 async function main() {
   const demo = await prisma.user.upsert({
-    where: { email: 'demo@evenup.local' },
+    where: { email: 'demo@even-up.local' },
     update: {},
     create: {
       id: DEMO_USER_IDS.demo,
-      email: 'demo@evenup.local',
+      email: 'demo@even-up.local',
       name: 'Demo User',
     },
   });
 
   const anna = await prisma.user.upsert({
-    where: { email: 'anna@evenup.local' },
+    where: { email: 'anna@even-up.local' },
     update: {},
     create: {
       id: DEMO_USER_IDS.anna,
-      email: 'anna@evenup.local',
+      email: 'anna@even-up.local',
       name: 'Anna',
     },
   });
 
   const ben = await prisma.user.upsert({
-    where: { email: 'ben@evenup.local' },
+    where: { email: 'ben@even-up.local' },
     update: {},
     create: {
       id: DEMO_USER_IDS.ben,
-      email: 'ben@evenup.local',
+      email: 'ben@even-up.local',
       name: 'Ben',
     },
   });
@@ -125,7 +125,7 @@ async function main() {
     });
   }
 
-  console.log('Seed complete. Demo user: demo@evenup.local (see DEMO_USER_IDS comment to log in)');
+  console.log('Seed complete. Demo user: demo@even-up.local (see DEMO_USER_IDS comment to log in)');
 }
 
 main()

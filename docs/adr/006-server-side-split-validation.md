@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 Expense splits define how a payment is divided among group members — the core financial
-calculation of the app. EvenUp supports four split modes: `equal` (divide evenly),
+calculation of the app. Even-Up supports four split modes: `equal` (divide evenly),
 `exact` (arbitrary amounts per member), `percent` (percentage shares), and `shares`
 (ratio-based).
 
