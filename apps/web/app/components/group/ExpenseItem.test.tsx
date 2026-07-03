@@ -140,6 +140,53 @@ describe('ExpenseItem', () => {
     expect(amountBox?.textContent).not.toMatch(/incl\./);
   });
 
+  it('uses the actual stored split, not an equal division, for the "you get" amount', () => {
+    // Alice (the mocked current user, u1) paid 100.00. Her own exact share is only
+    // 10.00, so she's owed back 90.00 from Bob — an equal division across 2 members
+    // would wrongly show 50.00 instead.
+    const expense: Expense = {
+      ...baseExpense,
+      amountCents: 10000,
+      originalAmountCents: 10000,
+      splitMode: 'exact',
+      splits: [
+        { userId: 'u1', owedCents: 1000 },
+        { userId: 'u2', owedCents: 9000 },
+      ],
+    };
+    wrap(<ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).toContain('90,00');
+    expect(amountBox?.textContent).not.toContain('50,00');
+  });
+
+  it('uses the actual stored split, not an equal division, for the "you owe" amount', () => {
+    // Bob paid 100.00; Alice's (the mocked current user) exact share is only 10.00,
+    // so she owes 10.00 — an equal division across 2 members would wrongly show 50.00.
+    const expense: Expense = {
+      ...baseExpense,
+      paidByUserId: 'u2',
+      paidByName: 'Bob',
+      amountCents: 10000,
+      originalAmountCents: 10000,
+      splitMode: 'exact',
+      splits: [
+        { userId: 'u1', owedCents: 1000 },
+        { userId: 'u2', owedCents: 9000 },
+      ],
+    };
+    wrap(<ExpenseItem expense={expense} group={group} showConverted onDeleted={() => {}} />);
+    const amountBox = screen
+      .getByText('Dinner')
+      .closest('.expense-item')
+      ?.querySelector('.expense-amount-box');
+    expect(amountBox?.textContent).toContain('10,00');
+    expect(amountBox?.textContent).not.toContain('50,00');
+  });
+
   it('renders edit and delete buttons', () => {
     wrap(<ExpenseItem expense={baseExpense} group={group} showConverted onDeleted={() => {}} />);
     // Edit link

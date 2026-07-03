@@ -11,6 +11,10 @@ vi.mock('react-router', () => ({
   ),
 }));
 
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1', name: 'Alice', defaultMarkupRate: 0 } }),
+}));
+
 const group: Group = {
   id: 'g1',
   name: 'Trip',
@@ -39,6 +43,47 @@ function splitRowInput(memberName: string): HTMLInputElement {
   if (!input) throw new Error(`No input found in split row for ${memberName}`);
   return input as HTMLInputElement;
 }
+
+describe('AddExpenseForm — default payer', () => {
+  it('defaults the payer to the current user for a new expense', () => {
+    wrap(
+      <AddExpenseForm
+        group={group}
+        submitting={false}
+        submitError={null}
+        onCancel={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+    const payerSelect = document.getElementById('expense-payer') as HTMLSelectElement;
+    expect(payerSelect.value).toBe('u1');
+  });
+
+  it('keeps the explicit payer from defaults when editing an existing expense', () => {
+    wrap(
+      <AddExpenseForm
+        group={group}
+        submitting={false}
+        submitError={null}
+        onCancel={() => {}}
+        onSubmit={() => {}}
+        defaults={{
+          description: 'Dinner',
+          amountCents: 1000,
+          paidByUserId: 'u2',
+          splitMode: 'equal',
+          date: '2026-01-01',
+          splits: [
+            { userId: 'u1', owedCents: 500 },
+            { userId: 'u2', owedCents: 500 },
+          ],
+        }}
+      />,
+    );
+    const payerSelect = document.getElementById('expense-payer') as HTMLSelectElement;
+    expect(payerSelect.value).toBe('u2');
+  });
+});
 
 describe('AddExpenseForm — exact split participant toggling', () => {
   it('restores a participant’s exact amount after toggling them off and back on', async () => {

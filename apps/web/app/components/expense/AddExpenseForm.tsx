@@ -1,6 +1,7 @@
 import { FormEvent, ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 import { Group, Member, SplitMode, NewExpenseInput } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { SplitModeToggle } from './SplitModeToggle';
 import { Button } from '../ui/button';
@@ -164,6 +165,7 @@ export function AddExpenseForm({
   banner,
 }: AddExpenseFormProps) {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
 
   const [description, setDescription] = useState(defaults?.description ?? '');
@@ -178,8 +180,14 @@ export function AddExpenseForm({
   const [amountInput, setAmountInput] = useState(
     displayAmountCents != null ? (displayAmountCents / 100).toFixed(2) : '',
   );
+  // For a new expense (no defaults), default the payer to the current user rather
+  // than an arbitrary group member — that's who actually paid in the common case.
+  const currentUserIsMember = group.members.some((m) => m.id === user?.id);
   const [payerId, setPayerId] = useState<string>(
-    defaults?.paidByUserId ?? group.members[0]?.id ?? '',
+    defaults?.paidByUserId ??
+      (currentUserIsMember ? user!.id : undefined) ??
+      group.members[0]?.id ??
+      '',
   );
   const [splitMode, setSplitMode] = useState<SplitMode>(defaults?.splitMode ?? 'equal');
   const [date, setDate] = useState(defaults?.date ?? today);
