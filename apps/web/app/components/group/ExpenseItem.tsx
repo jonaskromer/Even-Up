@@ -35,10 +35,12 @@ export function ExpenseItem({ expense, group, showConverted, onDeleted }: Expens
   const secondaryCents = showConverted ? expense.originalAmountCents : expense.amountCents;
   const secondaryCurrency = showConverted ? expense.originalCurrency : group.currency;
 
-  // Share calculation always uses converted cents (splits are stored in group currency)
-  const share = Math.round(expense.amountCents / group.members.length);
+  // Read the current user's actual stored split rather than assuming an equal
+  // division — the split may be exact/percent/shares, or derived from receipt
+  // line items, and the stored ExpenseSplit rows are always the source of truth.
+  const myShareCents = expense.splits?.find((s) => s.userId === currentUserId)?.owedCents ?? 0;
   const youPaid = expense.paidByUserId === currentUserId;
-  const userShareCents = youPaid ? expense.amountCents - share : share;
+  const userShareCents = youPaid ? expense.amountCents - myShareCents : myShareCents;
   const cls = youPaid ? 'text-success' : 'text-danger';
   const shareLabel = youPaid
     ? t('expense.item.youGet', { amount: formatCurrency(userShareCents, group.currency) })
