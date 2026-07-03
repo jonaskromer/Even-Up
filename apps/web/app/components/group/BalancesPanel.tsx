@@ -57,12 +57,7 @@ export function BalancesPanel({
               return (
                 <div key={b.userId} className="balance-item">
                   <span>
-                    <strong className="balance-person">{b.name}</strong>
-                    {b.email && (
-                      <span className="block text-xs text-muted-foreground font-normal">
-                        {b.email}
-                      </span>
-                    )}{' '}
+                    <strong className="balance-person">{b.name}</strong>{' '}
                     {positive ? t('balances.gets') : t('balances.owes')}
                   </span>
                   <strong className={positive ? 'text-success' : 'text-danger'}>

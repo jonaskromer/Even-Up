@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createExpenseSchema, updateExpenseSchema } from '@evenup/shared';
+import {
+  createExpenseSchema,
+  updateExpenseSchema,
+  expenseExportRowSchema,
+  type ExpenseExportRow,
+} from '@evenup/shared';
 import { prisma } from '../db/prisma.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireGroupMember } from '../middleware/requireGroupMember.js';
@@ -87,6 +92,33 @@ const pageSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+// RFC4126-minimal CSV escaping: wrap in quotes (doubling any inner quotes) only when
+// the field actually contains a comma, quote, or newline.
+function csvField(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function centsToDecimalString(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+// `emails` fixes the member-column order (and set) across every row — every row gets
+// one value per email, defaulting to '0.00' for a member not involved in that expense.
+export function rowsToCsv(rows: ExpenseExportRow[], emails: string[]): string {
+  const header = ['Date', 'Description', 'Cost', ...emails].map(csvField).join(',');
+  const lines = rows.map((row) => {
+    const cols = [
+      row.date,
+      row.description,
+      centsToDecimalString(row.amountCents),
+      ...emails.map((email) => centsToDecimalString(row.memberNetCents[email] ?? 0)),
+    ];
+    return cols.map(csvField).join(',');
+  });
+  return [header, ...lines].join('\n') + '\n';
+}
+
 export async function resolveConvertedAmount(
   originalAmountCents: number,
   originalCurrency: string,
@@ -134,6 +166,58 @@ export async function expensesRoutes(app: FastifyInstance) {
 
       if (!expense) throw new HttpError(404, 'Ausgabe nicht gefunden.');
       return formatExpense(expense);
+    },
+  );
+
+  // Exports every expense as CSV in the same wide, Splitwise-style format expense
+  // *import* already reads (Date, Description, Cost, one net-balance column per
+  // member) — see expenseExportRowSchema for the exact semantics. Deliberately
+  // excludes receipt line items: a receipt-created expense exports the same as any
+  // other. Registered as a static path, so it's matched before the parametric
+  // ':expenseId' route above.
+  app.get(
+    '/groups/:groupId/expenses/export',
+    { preHandler: [requireAuth, requireGroupMember] },
+    async (req, reply) => {
+      const { groupId } = req.params as { groupId: string };
+
+      const [group, members, expenses] = await Promise.all([
+        prisma.group.findUniqueOrThrow({ where: { id: groupId }, select: { name: true } }),
+        prisma.groupMember.findMany({
+          where: { groupId },
+          include: { user: { select: { id: true, email: true } } },
+        }),
+        prisma.expense.findMany({
+          where: { groupId },
+          include: { splits: true },
+          orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        }),
+      ]);
+
+      // Members can never be removed from a group once added (no such endpoint exists),
+      // so current membership always covers every historical expense's participants.
+      const emails = members.map((m) => m.user.email).sort();
+
+      const rows: ExpenseExportRow[] = expenses.map((exp) => {
+        const owedByUserId = new Map(exp.splits.map((s) => [s.userId, s.owedCents]));
+        const memberNetCents: Record<string, number> = {};
+        for (const m of members) {
+          const owedCents = owedByUserId.get(m.user.id) ?? 0;
+          memberNetCents[m.user.email] =
+            m.user.id === exp.paidByUserId ? exp.amountCents - owedCents : -owedCents;
+        }
+        return expenseExportRowSchema.parse({
+          date: exp.date.toISOString().slice(0, 10),
+          description: exp.description,
+          amountCents: exp.amountCents,
+          memberNetCents,
+        });
+      });
+
+      const filename = `${group.name.replace(/[^a-z0-9]+/gi, '-')}-expenses.csv`;
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(rowsToCsv(rows, emails));
     },
   );
 

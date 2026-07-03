@@ -554,6 +554,61 @@ Delete an expense and its associated splits.
 
 **Response `204`:** No content
 
+### GET `/api/groups/:groupId/expenses/export`
+
+Export **every** expense in the group (not just the current page) as CSV, in the same
+wide, Splitwise-style format expense *import* (`POST .../expenses`, driven by
+`ImportExpensesButton.tsx` client-side) already reads: `Date,Description,Cost`
+followed by one net-balance column per group member — so a group's data round-trips
+between the two. Registered as a static path, so it's matched before
+`GET .../expenses/:expenseId` above — a group could theoretically have an expense with
+the literal id `export`, but the export route always wins for that exact segment.
+
+Each logical row is validated server-side against `expenseExportRowSchema` (from
+`@evenup/shared`, `packages/shared/src/schemas/expenseExport.ts`) before being
+flattened into CSV columns — this is a response-shape guarantee, not request
+validation:
+
+| Field | Type | Notes |
+|---|---|---|
+| `date` | `string` | `YYYY-MM-DD` |
+| `description` | `string` | |
+| `amountCents` | `number` (int) | Total expense amount — becomes the `Cost` column |
+| `memberNetCents` | `Record<email, number>` | One entry per group member, keyed by **email**; values sum to zero across a row |
+
+Each member's net value is positive if they're owed money on that expense (they paid
+more than their own share) and negative if they owe money — e.g. for a €40 dinner
+split exactly 10/30, the payer's column reads `30.00` (owed back) and the other
+member's column reads `-30.00` (owes). This is exactly the convention
+`ImportExpensesButton.tsx`'s `parseCsv()` already expects on the way in.
+
+**Members are identified by email — not id/uuid, not display name.** Both the export
+column headers and the import column-matching logic agree on this; email is the one
+identifier that's both stable/unique and meaningful in a human-edited spreadsheet.
+Since there's no "remove member" endpoint, current group membership always covers
+every historical expense's participants, so no historical data is ever dropped from
+the column set.
+
+**Deliberately excluded:** `ReceiptLineItem`/`ReceiptLineItemAssignment` data. A
+receipt-created expense exports identically to a normal one — only its final
+`Expense`/`ExpenseSplit` rows, never the per-item breakdown.
+
+**Response `200`:** `Content-Type: text/csv; charset=utf-8`, with
+`Content-Disposition: attachment; filename="<group-name>-expenses.csv"`. Body example
+(a group of Alice and Bob, one €40 dinner split 10/30):
+
+```csv
+Date,Description,Cost,alice@example.com,bob@example.com
+2026-06-30,Dinner,40.00,30.00,-30.00
+```
+
+`Cost` and each member column are decimal strings (cents divided by 100, two decimal
+places) — `amountCents`/`memberNetCents` in the schema table above are the
+pre-formatting canonical values. Fields are CSV-escaped (quoted, with doubled inner
+quotes) only when they contain a comma, quote, or newline.
+
+**Errors:** `401` no session, `403` not a member of the group
+
 ---
 
 ## Receipts

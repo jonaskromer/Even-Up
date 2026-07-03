@@ -283,8 +283,10 @@ packages/shared/
     ├── expense.ts     # createExpenseSchema (+ SplitMode type, optional exactSplits for CSV import)
     ├── group.ts       # createGroupSchema, addMemberSchema
     ├── settlement.ts  # createSettlementSchema
-    └── receipt.ts     # geminiReceiptResultSchema, create/updateReceiptExpenseSchema
-                        # (line items with their own equal/exact/percent/shares splitMode)
+    ├── receipt.ts     # geminiReceiptResultSchema, create/updateReceiptExpenseSchema
+    │                   # (line items with their own equal/exact/percent/shares splitMode)
+    └── expenseExport.ts # expenseExportRowSchema — validates each CSV export row
+                        # server-side before serialization, not client input
 ```
 
 Auth no longer has shared schemas here — sign-up/login/password-reset payloads are
@@ -314,7 +316,7 @@ Both the API (server-side `schema.parse(req.body)`) and the frontend (type impor
 
 ## Testing Strategy
 
-### API Tests (94 tests, Vitest + `app.inject()`)
+### API Tests (98 tests, Vitest + `app.inject()`)
 
 The API tests use Fastify's `app.inject()` method for in-process HTTP testing — no network layer, no port binding, no supertest dependency.
 
@@ -325,14 +327,14 @@ The API tests use Fastify's `app.inject()` method for in-process HTTP testing �
 | `computeSplits.test.ts`      | 10    | Equal mode ignores client splits, exact/percent/shares validation, rounding tolerance, outsider/duplicate userId rejected, sum-too-high/too-low rejected                            |
 | `debtSimplification.test.ts` | 6     | Fewer transfers than naive, net balances preserved, edge cases (zero balance, single debtor, 4+ people)                                                                            |
 | `exchangeRate.test.ts`       | 5     | Same currency → 1, DB cache hit, Frankfurter v2 fetch + upsert, v1 fallback when v2 fails, 503 when both fail                                                                     |
-| `expenses.test.ts`           | 11    | POST (401, create with original fields, exactSplits, markupRate applied), PUT (update splits, 409 stale conflict), GET single (401, fields, 404), DELETE (401, removes expense)    |
+| `expenses.test.ts`           | 15    | POST (401, create with original fields, exactSplits, markupRate applied), PUT (update splits, 409 stale conflict), GET single (401, fields, 404), DELETE (401, removes expense), GET `/export` (401, 403, wide email-keyed CSV shape, tolerates rounding drift in an `equal` split — regression) |
 | `groups.test.ts`             | 9     | GET /groups (401, array), POST (creator as owner, currency field, defaults EUR, inherits preferredCurrency after PATCH /me), GET /:id (member + non-member), GET /:id/balances     |
 | `joinRequests.test.ts`       | 7     | Invite creates pending request, duplicate/self-invite rejected, accept/decline, wrong-user accept → 403, re-invite after accept → 409                                              |
 | `settlements.test.ts`        | 4     | Record settlement → 201, 401 without auth, settle-up suggestions, balance zeroed after settlement                                                                                 |
 | `geminiReceipt.test.ts`      | 10    | Parses well-formed response, sends `responseSchema`/inlineData, 422 on non-JSON/invalid schema, retries primary 3× before falling back, succeeds on retry without fallback, 503 when both exhausted, progress callback sequence |
 | `receipts.test.ts`           | 17    | `/parse` streams NDJSON progress + result/error events (incl. CORS header regression check), 400 on non-image, create/update with equal/exact/percent/shares per-item modes, excluded items skipped, 422 on bad sums or non-member, 403 for non-member, `GET /expenses/:id` includes `lineItems` |
 
-### Frontend Tests (61 tests, Vitest + React Testing Library)
+### Frontend Tests (68 tests, Vitest + React Testing Library)
 
 | Suite                                    | Tests | What it verifies                                                                                         |
 | ---------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------- |
@@ -340,8 +342,9 @@ The API tests use Fastify's `app.inject()` method for in-process HTTP testing �
 | `lib/computeBalances.test.ts`            | 12    | `formatEuro` formatting, payer credited, other-group ignored, 3-member net, multi-expense, rounding      |
 | `lib/computePerCurrencyBalances.test.ts` | 7     | Empty input, single-currency net=0, payer credited in original currency, 50/50 USD, two-currency buckets |
 | `lib/receiptSplits.test.ts`              | 13    | Per-item equal/exact/percent/shares computation, remainder-to-last-assignee rounding, aggregation across items skipping excluded ones, `isItemSplitValid` for each mode |
-| `components/group/ExpenseItem.test.tsx`  | 10    | Description rendered, you-paid vs payer-name label, `showConverted` toggle, secondary currency shown/hidden, markup hint shown/hidden |
-| `components/expense/AddExpenseForm.test.tsx` | 3 | Regression: toggling a participant off/on in exact mode restores (not resets) their amount, "remaining/too much" feedback correctly appears/disappears across a toggle round-trip, untouched participants' edits survive a toggle |
+| `components/group/ExpenseItem.test.tsx`  | 12    | Description rendered, you-paid vs payer-name label, `showConverted` toggle, secondary currency shown/hidden, markup hint shown/hidden, regression: "you owe/get" reads the actual stored split (not an equal division) for both the payer's and a non-payer's perspective |
+| `components/group/ExportExpensesButton.test.tsx` | 2 | Downloads the group's export CSV with a sensible fallback filename, shows an error message when the download fails |
+| `components/expense/AddExpenseForm.test.tsx` | 6 | Regression: toggling a participant off/on in exact mode restores (not resets) their amount, "remaining/too much" feedback correctly appears/disappears across a toggle round-trip, untouched participants' edits survive a toggle, defaults the payer to the current user for a new expense (keeps the explicit payer when editing), submits as `exact` (not `equal`) when the payer opts out of an otherwise-equal split |
 | `components/feedback/LoadingState.test.tsx` | 3  | Default label, custom label, `role="status"` for accessibility                                           |
 | `components/feedback/ErrorState.test.tsx`   | 3  | Renders message, retry button fires callback, no button without `onRetry`                                |
 | `routes/groups.$groupId_.receipt.test.ts`   | 2  | Regression: `clientLoader` reads `expenseId` from the request URL (not `window.location`, which can lag the destination during a client-side navigation) |

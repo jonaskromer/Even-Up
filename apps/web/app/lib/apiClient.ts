@@ -109,6 +109,39 @@ export async function postFileStream<TProgress, TResult>(
   throw new ApiError('Netzwerkfehler', 0);
 }
 
+// Fetches a file response (e.g. a CSV export) and triggers a browser download,
+// using the server's Content-Disposition filename when present.
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Netzwerkfehler';
+    throw new ApiError(`Netzwerkfehler: ${msg}`, 0);
+  }
+
+  if (!response.ok) {
+    await throwApiErrorFromResponse(response);
+  }
+
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+  const filename = filenameMatch?.[1] ?? fallbackFilename;
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, body: unknown) =>
