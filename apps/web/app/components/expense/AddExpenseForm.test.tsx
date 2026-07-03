@@ -85,6 +85,59 @@ describe('AddExpenseForm — default payer', () => {
   });
 });
 
+describe('AddExpenseForm — payer excluded from an otherwise-equal split', () => {
+  const threeMemberGroup: Group = {
+    id: 'g2',
+    name: 'Trip',
+    currency: 'EUR',
+    members: [
+      { id: 'u1', name: 'Alice', email: 'alice@test.com', role: 'owner' },
+      { id: 'u2', name: 'Bob', email: 'bob@test.com', role: 'member' },
+      { id: 'u3', name: 'Carol', email: 'carol@test.com', role: 'member' },
+    ],
+  };
+
+  it('submits as "exact" (not "equal") when the payer opts out of the split, so only the remaining participants owe anything', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    wrap(
+      <AddExpenseForm
+        group={threeMemberGroup}
+        submitting={false}
+        submitError={null}
+        onCancel={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const descInput = document.getElementById('expense-desc') as HTMLInputElement;
+    await user.type(descInput, 'Dinner');
+    const amountInput = document.getElementById('expense-amount') as HTMLInputElement;
+    await user.clear(amountInput);
+    await user.type(amountInput, '30.00');
+
+    // Alice is the default payer (current user) and starts as a participant too —
+    // deselect her so only Bob and Carol split the cost she fronted.
+    await user.click(screen.getByRole('button', { name: /Alice/ }));
+
+    await user.click(screen.getByRole('button', { name: /save|speichern/i }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0];
+    expect(payload.paidByUserId).toBe('u1');
+    // Sending 'equal' here would make the server re-divide the amount across all
+    // three members (including Alice) and discard exactSplits entirely.
+    expect(payload.splitMode).toBe('exact');
+    expect(payload.exactSplits).toEqual(
+      expect.arrayContaining([
+        { userId: 'u2', owedCents: 1500 },
+        { userId: 'u3', owedCents: 1500 },
+      ]),
+    );
+    expect(payload.exactSplits).toHaveLength(2);
+  });
+});
+
 describe('AddExpenseForm — exact split participant toggling', () => {
   it('restores a participant’s exact amount after toggling them off and back on', async () => {
     const user = userEvent.setup();

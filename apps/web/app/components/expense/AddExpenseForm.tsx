@@ -243,8 +243,15 @@ export function AddExpenseForm({
     if (!description.trim() || amountCents <= 0 || !payerId || participants.size === 0) return;
 
     let exactSplits: { userId: string; owedCents: number }[] | undefined;
+    // The server's 'equal' mode always divides amongst *every* group member and
+    // ignores any exactSplits sent alongside it (see computeAndValidateSplits) — so
+    // excluding someone (e.g. the payer themselves) while still labeled 'equal' would
+    // silently include them again. Once participants are a strict subset of the group,
+    // submit as 'exact' instead so the computed per-participant amounts actually stick.
+    const isPartialEqual = splitMode === 'equal' && participants.size < group.members.length;
+    const effectiveSplitMode = isPartialEqual ? 'exact' : splitMode;
 
-    if (splitMode === 'equal' && participants.size < group.members.length) {
+    if (isPartialEqual) {
       const n = participantMembers.length;
       const base = Math.floor(amountCents / n);
       const rem = amountCents - base * n;
@@ -273,7 +280,7 @@ export function AddExpenseForm({
       markupRate: markupRate > 0 ? markupRate : undefined,
       paidByUserId: payerId,
       date,
-      splitMode,
+      splitMode: effectiveSplitMode,
       exactSplits,
     });
   };
