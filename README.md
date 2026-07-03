@@ -68,11 +68,10 @@ A web application for splitting expenses fairly among groups. Create groups for 
 ### UI & Quality of Life
 
 - Dark mode (system preference detected on load, manual toggle persisted to localStorage)
-- CSV import for bulk expense entry (column-based, name matching, preview before import)
+- CSV import for bulk expense entry (column-based, email matching, preview before import)
 - Activity log per group with load-more pagination (expenses added/edited/deleted, settlements recorded/edited/deleted, members invited/joined)
 - Global activity feed on the dashboard aggregating events across all of the user's groups
 - Load-more pagination for expense lists and activity logs — first 20 items shown, more loaded on demand
-- Member email shown alongside name in balances and member panels to disambiguate same-name users
 
 ---
 
@@ -169,6 +168,41 @@ Credentials and password-reset tokens live entirely in Supabase Auth's own `auth
 table (managed by Supabase, separate from this database) — there is no `passwordHash`
 or password-reset-token table in this app's schema.
 
+### CSV Export Row Schema
+
+`GET /api/groups/:id/expenses/export` (see [API Endpoints](#expenses)) exports in the
+same wide, Splitwise-style format expense **import** already reads (see
+[UI & Quality of Life](#ui--quality-of-life)) — `Date,Description,Cost,` followed by
+one column per group member — so a group's data round-trips between the two. Each
+logical row is validated server-side against `expenseExportRowSchema` in
+`packages/shared/src/schemas/expenseExport.ts` before being flattened into CSV
+columns:
+
+| Field           | Type              | Notes                                                                 |
+| --------------- | ----------------- | ---------------------------------------------------------------------- |
+| `date`          | `string`          | `YYYY-MM-DD`                                                            |
+| `description`   | `string`          |                                                                          |
+| `amountCents`   | `number` (int)    | Total expense amount — becomes the `Cost` column                       |
+| `memberNetCents`| `Record<email, number>` | One entry per group member, keyed by **email** (see below); values sum to zero across a row |
+
+Each member's net value is positive if they're owed money on that expense (they paid
+more than their own share) and negative if they owe money — exactly Splitwise's
+per-expense net-balance convention, and exactly what expense import already parses
+back out via `payerNetCents`/`owedCents` in `ImportExpensesButton.tsx`.
+
+**Members are identified by email — not by id/uuid, and not by display name.** An
+internal id has no place in a human-edited CSV, and two different people can share a
+display name (a real ambiguity the old name-matching import logic had to guess
+around); email is unique and stable. Both the export column headers and the import
+column-matching logic (`matchMember()` in `ImportExpensesButton.tsx`) now agree on
+this, whereas previously import matched on a fuzzy name comparison. Group membership
+is fixed once added (there is no "remove member" feature), so current membership
+always covers every historical expense's participants.
+
+`ReceiptLineItem`/`ReceiptLineItemAssignment` are deliberately excluded — a
+receipt-created expense exports identically to a manually-entered one, using only its
+final `Expense`/`ExpenseSplit` rows, never the per-item breakdown that produced them.
+
 ---
 
 ## API Endpoints
@@ -215,6 +249,7 @@ details of every endpoint below.
 | GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) — includes `lineItems`/`receiptStoreName` for receipt-created expenses |
 | PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
 | DELETE | `/api/groups/:id/expenses/:eid` | Delete expense             |
+| GET    | `/api/groups/:id/expenses/export` | Export every expense + its splits as CSV (one row per expense/member pair, no line items) — see [Data Model](#data-model) for the row schema and `docs/api-reference.md` for the full column reference |
 
 ### Settlements
 
@@ -285,7 +320,7 @@ details of every endpoint below.
 │   │   │   │   ├── dashboard/  # BalanceBanner, GroupList, GroupCard, GlobalActivityFeed
 │   │   │   │   ├── group/      # GroupDetail, ExpenseFeed, BalancesPanel, MembersPanel,
 │   │   │   │   │               # SettleUpPanel, InviteLinkButton, ActivityLog,
-│   │   │   │   │               # ImportExpensesButton
+│   │   │   │   │               # ImportExpensesButton, ExportExpensesButton
 │   │   │   │   ├── expense/    # AddExpenseForm, SplitModeToggle
 │   │   │   │   ├── receipt/    # ReceiptUploadStep, ReceiptProcessingStep,
 │   │   │   │   │               # ReceiptLineItemReview (per-item equal/exact/percent/shares)
@@ -295,9 +330,9 @@ details of every endpoint below.
 │   │   │   ├── context/        # AuthContext (Supabase session-backed login,
 │   │   │   │                   # register, logout), PendingInvitesContext
 │   │   │   │                   # (incoming join requests)
-│   │   │   ├── lib/            # apiClient (incl. postFileStream for NDJSON uploads),
-│   │   │   │                   # computeBalances, receiptSplits, requireAuth,
-│   │   │   │                   # supabaseClient, utils
+│   │   │   ├── lib/            # apiClient (incl. postFileStream for NDJSON uploads and
+│   │   │   │                   # downloadFile for the CSV export), computeBalances,
+│   │   │   │                   # receiptSplits, requireAuth, supabaseClient, utils
 │   │   │   ├── root.tsx        # Root layout + AuthProvider + PendingInvitesProvider
 │   │   │   ├── routes.ts       # File-based route config (@react-router/fs-routes)
 │   │   │   └── styles.css      # Tailwind + shadcn CSS variables + domain styles
@@ -306,8 +341,9 @@ details of every endpoint below.
 │   │   └── react-router.config.ts  # ssr: false
 │   ├── api/                    # Fastify REST API
 │   │   ├── src/
-│   │   │   ├── routes/         # auth, groups, expenses, settlements, invites, activities,
-│   │   │   │                   # joinRequests, receipts (Gemini OCR + line-item expenses)
+│   │   │   ├── routes/         # auth, groups, expenses (incl. GET /export), settlements,
+│   │   │   │                   # invites, activities, joinRequests,
+│   │   │   │                   # receipts (Gemini OCR + line-item expenses)
 │   │   │   ├── middleware/     # requireAuth (verifies Supabase JWT, upserts User),
 │   │   │   │                   # requireGroupMember, errorHandler
 │   │   │   ├── services/       # balanceService, debtSimplificationService, authService
@@ -327,7 +363,8 @@ details of every endpoint below.
 │   ├── web-static/             # M1 HTML/CSS prototype (archive)
 │   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/auth/me
 ├── packages/
-│   └── shared/                 # Zod schemas (group, expense, settlement, receipt)
+│   └── shared/                 # Zod schemas (group, expense, settlement, receipt,
+│                                # expenseExport)
 ├── docs/
 │   ├── milestones.md           # Criterion-to-code mapping for grading
 │   ├── architecture.md         # System, frontend & API architecture diagrams
@@ -416,8 +453,8 @@ npm run dev                     # Vite on http://localhost:5173
 
 ```bash
 # From repo root, per workspace
-npm test --workspace=apps/api   # API: auth, expenses, balances, settlements, debt simplification, join requests, exchange rates, receipts, Gemini parsing (94 tests)
-npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, receiptSplits, ExpenseItem, AddExpenseForm, LoadingState, ErrorState, receipt route loader (61 tests)
+npm test --workspace=apps/api   # API: auth, expenses (incl. CSV export), balances, settlements, debt simplification, join requests, exchange rates, receipts, Gemini parsing (98 tests)
+npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, receiptSplits, ExpenseItem, ExportExpensesButton, AddExpenseForm, LoadingState, ErrorState, receipt route loader (68 tests)
 npm run test:e2e                # Playwright E2E (auth, dashboard) — requires `npx playwright install` once
 ```
 
@@ -641,12 +678,11 @@ Production deployment, architecture migration, and UI polish.
 - [x] Expense edit flow (update existing expense)
 - [x] Stretch: group invite links (shareable join URL with 7-day expiry)
 - [x] Stretch: dark mode (system preference + manual toggle, persisted)
-- [x] Stretch: CSV expense import (bulk entry with member-name matching and preview)
+- [x] Stretch: CSV expense import (bulk entry with member-email matching and preview)
 - [x] Stretch: activity log per group (relative timestamps, load-more paginated)
 - [x] Stretch: password reset — now handled by Supabase Auth's own
       `resetPasswordForEmail`/`updateUser` flow (see [ADR 004](docs/adr/004-supabase-auth.md)),
       superseding the original custom token-based flow
-- [x] Stretch: email disambiguation in member/balance panels
 - [x] Stretch: group join requests — adding a member by email creates a pending request
       that must be accepted, not an immediate add; header notification bell across all
       pages for incoming requests, with a per-group view of outstanding outgoing invites
@@ -691,6 +727,9 @@ self-hosted Postgres + Prisma database for all application data. See
       from a photo; review screen assigns items to members with per-item equal/exact/
       percent/shares splits, excludable items, live per-member totals, and a re-editable
       "Edit line items" flow on the resulting expense; see [ADR 012](docs/adr/012-receipt-ai-parsing.md)
+- [x] Stretch: CSV export — every expense's `Expense`/`ExpenseSplit` data (no receipt
+      line items), in the same wide, email-keyed format CSV import already reads, so a
+      group's data round-trips between the two
 - [ ] Stretch: recurring expenses (rent, subscriptions)
 - [ ] Stretch: charts and spending statistics per group
 
@@ -716,6 +755,7 @@ self-hosted Postgres + Prisma database for all application data. See
 | [ADR 010 — Multi-currency](docs/adr/010-multi-currency.md)                             | Per-expense currency with historical ECB rates via Frankfurter API; permanent DB cache; dual-amount storage    |
 | [ADR 011 — Credit Card FX Markup](docs/adr/011-credit-card-fx-markup.md)               | Per-user default + per-expense override markup percentage applied post-conversion                             |
 | [ADR 012 — Receipt AI Parsing](docs/adr/012-receipt-ai-parsing.md)                     | Gemini OCR with retry/fallback models, streamed progress, normalized line-item schema, per-item split modes    |
+| [ADR 013 — CSV Export Format](docs/adr/013-csv-export-format.md)                       | Export matches import's wide, Splitwise-style format; members keyed by email, not id/name; rounding-drift tolerance |
 
 ---
 
@@ -727,6 +767,7 @@ self-hosted Postgres + Prisma database for all application data. See
 - No mobile app — responsive web only
 - Duplicate-join-request prevention is enforced at the application level (a check-then-create), not via a database constraint — a small race window exists where two concurrent invites to the same person could both succeed
 - CORS is restricted to `CORS_ORIGIN` env var (defaults to `localhost:5173/4173/5174/4174` for local dev); allowed methods include `PATCH` explicitly
+- `equal`-mode splits don't remainder-correct: `computeAndValidateSplits()` gives every member `Math.round(amountCents / memberCount)`, so on an amount not evenly divisible by the member count, the stored splits can sum to up to `memberCount − 1` cents more or less than the expense total. This is accepted/unvalidated at creation time; CSV export's schema tolerates the same drift rather than rejecting otherwise-valid data (learned the hard way — see `apps/api/src/tests/expenses.test.ts`'s rounding-drift regression test)
 
 ---
 

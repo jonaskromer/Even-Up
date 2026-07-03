@@ -321,3 +321,189 @@ describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
     expect(getRes.statusCode).toBe(404);
   });
 });
+
+describe('GET /api/groups/:groupId/expenses/export', () => {
+  // Isolated group/users: the shared group above has exactly one member, which
+  // several 'equal'-split tests rely on — adding a second member there would
+  // silently change those splits.
+  let exportGroupId: string;
+  let ownerId: string;
+  let ownerToken: string;
+  let otherId: string;
+  let thirdId: string;
+
+  beforeAll(async () => {
+    await prisma.user.deleteMany({ where: { email: { startsWith: 'test-exp-export-' } } });
+
+    const owner = await prisma.user.create({
+      data: {
+        id: '44444444-4444-4444-4444-444444444444',
+        email: 'test-exp-export-owner@evenup.local',
+        name: 'Export Owner',
+      },
+    });
+    ownerId = owner.id;
+    ownerToken = createTestToken({ sub: owner.id, email: owner.email, name: owner.name });
+
+    const other = await prisma.user.create({
+      data: {
+        id: '55555555-5555-5555-5555-555555555555',
+        email: 'test-exp-export-other@evenup.local',
+        name: 'Export Other',
+      },
+    });
+    otherId = other.id;
+
+    const third = await prisma.user.create({
+      data: {
+        id: '77777777-7777-7777-7777-777777777777',
+        email: 'test-exp-export-third@evenup.local',
+        name: 'Export Third',
+      },
+    });
+    thirdId = third.id;
+
+    const groupRes = await app.inject({
+      method: 'POST',
+      url: '/api/groups',
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { name: 'Export Test Group' },
+    });
+    exportGroupId = groupRes.json().id;
+    await prisma.groupMember.create({
+      data: { groupId: exportGroupId, userId: other.id, role: 'member' },
+    });
+    await prisma.groupMember.create({
+      data: { groupId: exportGroupId, userId: third.id, role: 'member' },
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/groups/${exportGroupId}/expenses`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        description: 'Dinner',
+        amountCents: 4000,
+        paidByUserId: owner.id,
+        date: '2026-02-01',
+        splitMode: 'exact',
+        exactSplits: [
+          { userId: owner.id, owedCents: 1000 },
+          { userId: other.id, owedCents: 3000 },
+        ],
+      },
+    });
+
+    // 'equal' mode across 3 members on an amount not evenly divisible by 3: the
+    // server computes Math.round(5000/3) = 1667 for every member with no remainder
+    // correction (apps/api/src/services/computeSplits.ts), so the stored splits sum
+    // to 5001 — 1 cent more than amountCents. This is real, accepted drift the export
+    // schema must tolerate rather than reject.
+    await app.inject({
+      method: 'POST',
+      url: `/api/groups/${exportGroupId}/expenses`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: {
+        description: 'Groceries',
+        amountCents: 5000,
+        paidByUserId: owner.id,
+        date: '2026-02-02',
+        splitMode: 'equal',
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.group.deleteMany({ where: { name: 'Export Test Group' } });
+    await prisma.user.deleteMany({ where: { email: { startsWith: 'test-exp-export-' } } });
+  });
+
+  it('returns 401 without auth', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/${exportGroupId}/expenses/export`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 403 for a non-member', async () => {
+    const outsider = await prisma.user.create({
+      data: {
+        id: '66666666-6666-6666-6666-666666666666',
+        email: 'test-exp-export-outsider@evenup.local',
+        name: 'Outsider',
+      },
+    });
+    const outsiderToken = createTestToken({
+      sub: outsider.id,
+      email: outsider.email,
+      name: outsider.name,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/${exportGroupId}/expenses/export`,
+      headers: { authorization: `Bearer ${outsiderToken}` },
+    });
+    expect(res.statusCode).toBe(403);
+
+    await prisma.user.delete({ where: { id: outsider.id } });
+  });
+
+  it('returns CSV in the same wide, email-keyed format expense import reads, excluding line items', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/${exportGroupId}/expenses/export`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain('.csv');
+
+    const lines = res.body.trim().split('\n');
+    // Member columns are emails (sorted), not names or ids — matches import's format.
+    expect(lines[0]).toBe(
+      'Date,Description,Cost,test-exp-export-other@evenup.local,test-exp-export-owner@evenup.local,test-exp-export-third@evenup.local',
+    );
+
+    const dataLines = lines.slice(1);
+    expect(dataLines).toHaveLength(2);
+
+    const dinnerCols = dataLines.find((l) => l.includes('Dinner'))!.split(',');
+    expect(dinnerCols).toHaveLength(6);
+    expect(dinnerCols[0]).toBe('2026-02-01');
+    expect(dinnerCols[2]).toBe('40.00'); // total cost
+    expect(dinnerCols[3]).toBe('-30.00'); // other: owes their 30.00 share
+    expect(dinnerCols[4]).toBe('30.00'); // owner: paid 40.00, owns only 10.00 → owed 30.00 back
+    expect(dinnerCols[5]).toBe('0.00'); // third: not involved in this expense at all
+
+    // No name, id, or line-item-related data leaks into the export.
+    expect(res.body).not.toContain('Export Owner');
+    expect(res.body).not.toContain('Export Other');
+    expect(res.body).not.toContain(ownerId);
+    expect(res.body).not.toContain(otherId);
+    expect(res.body).not.toContain(thirdId);
+    expect(res.body).not.toContain('ReceiptLineItem');
+    expect(res.body).not.toContain('lineItems');
+  });
+
+  it('exports an equal-mode split whose stored owedCents sum drifts by a rounding cent, instead of failing validation', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/groups/${exportGroupId}/expenses/export`,
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+
+    expect(res.statusCode).toBe(200); // this used to 400 "Ungültige Eingabe" before the fix
+    const lines = res.body.trim().split('\n');
+    const groceriesCols = lines.find((l) => l.includes('Groceries'))!.split(',');
+    expect(groceriesCols[2]).toBe('50.00'); // total cost
+    // 1667 owed each (Math.round(5000/3), no remainder correction) — owner is owed
+    // back 5000-1667=3333 (33.33), each non-payer owes 1667 (-16.67).
+    expect(groceriesCols[3]).toBe('-16.67'); // other
+    expect(groceriesCols[4]).toBe('33.33'); // owner
+    expect(groceriesCols[5]).toBe('-16.67'); // third
+  });
+});

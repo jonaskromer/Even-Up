@@ -29,10 +29,7 @@ export function MembersPanel({
         <ul className="space-y-2">
           {members.map((m) => (
             <li key={m.id} className="flex justify-between items-center py-1.5 text-sm">
-              <span>
-                <span className="font-medium">{m.name}</span>
-                {m.email && <span className="block text-xs text-muted-foreground">{m.email}</span>}
-              </span>
+              <span className="font-medium">{m.name}</span>
               <span className="text-muted-foreground text-xs">
                 {m.role === 'owner' ? t('members.roleOwner') : t('members.roleMember')}
               </span>

@@ -67,7 +67,11 @@ export function PendingInvitationsBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 rounded-md border bg-card shadow-md z-50 p-2">
+        // Fixed + inset-x on mobile so the panel is clamped to the viewport instead of
+        // growing leftward from the bell's position (which can push a fixed w-80 panel
+        // off the left edge of a narrow screen); reverts to the original bell-anchored
+        // absolute dropdown from `sm:` up, where there's enough room either way.
+        <div className="fixed left-2 right-2 top-16 sm:absolute sm:left-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 rounded-md border bg-card shadow-md z-50 p-2">
           <p className="text-sm font-medium px-2 py-1">{t('invitations.title')}</p>
           {requests.length === 0 ? (
             <p className="text-sm text-muted-foreground px-2 py-2">{t('invitations.empty')}</p>

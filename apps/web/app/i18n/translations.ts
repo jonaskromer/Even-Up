@@ -345,6 +345,10 @@ export const de = {
     unknownPayer: 'Unbekannt',
     payerError: 'Zahler konnte nicht ermittelt werden',
     sumMismatch: 'Summe stimmt nicht ({{actual}} ≠ {{expected}})',
+    exportButton: 'CSV exportieren',
+    exporting: 'Exportiert…',
+    exportError: 'Export fehlgeschlagen',
+    panelTitle: 'Import & Export',
   },
   receipt: {
     button: 'Beleg hinzufügen',
@@ -733,6 +737,10 @@ export const en: typeof de = {
     unknownPayer: 'Unknown',
     payerError: 'Could not determine payer',
     sumMismatch: 'Sum mismatch ({{actual}} ≠ {{expected}})',
+    exportButton: 'Export CSV',
+    exporting: 'Exporting…',
+    exportError: 'Export failed',
+    panelTitle: 'Import & Export',
   },
   receipt: {
     button: 'Add Receipt',

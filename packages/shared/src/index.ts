@@ -15,6 +15,8 @@ export {
 
 export { createSettlementSchema, type CreateSettlementInput } from './schemas/settlement.js';
 
+export { expenseExportRowSchema, type ExpenseExportRow } from './schemas/expenseExport.js';
+
 export {
   geminiReceiptResultSchema,
   createReceiptExpenseSchema,

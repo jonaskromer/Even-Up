@@ -27,12 +27,12 @@ function parseCsvDate(s: string): string {
   return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-function matchMember(csvName: string, members: Member[]): Member | undefined {
-  const lower = csvName.toLowerCase().trim();
-  return (
-    members.find((m) => m.name.toLowerCase() === lower) ??
-    members.find((m) => m.name.toLowerCase().split(' ')[0] === lower.split(' ')[0])
-  );
+// Matched by email — a stable, unique identifier, unlike a display name (which can
+// collide between two different people) and unlike an internal id (meaningless in a
+// human-edited CSV). Mirrors the export format's column headers exactly.
+function matchMember(csvHeader: string, members: Member[]): Member | undefined {
+  const lower = csvHeader.toLowerCase().trim();
+  return members.find((m) => (m.email ?? '').toLowerCase() === lower);
 }
 
 function parseCsv(

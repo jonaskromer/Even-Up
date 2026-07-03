@@ -7,8 +7,10 @@ import { BalancesPanel } from './BalancesPanel';
 import { SettleUpPanel } from './SettleUpPanel';
 import { MembersPanel } from './MembersPanel';
 import { ImportExpensesButton } from './ImportExpensesButton';
+import { ExportExpensesButton } from './ExportExpensesButton';
 import { ActivityLog } from './ActivityLog';
 import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
 import { PendingInvitationsBell } from '../layout/PendingInvitationsBell';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -87,7 +89,6 @@ export function GroupDetail({
           </Link>
           <nav className="user-nav">
             <PendingInvitationsBell />
-            <ImportExpensesButton group={group} onImported={onRevalidate} />
             {group.receiptsEnabled && (
               <Link to={`/groups/${group.id}/receipt`}>
                 <Button size="sm" variant="outline">
@@ -174,6 +175,15 @@ export function GroupDetail({
               initialActivities={activities}
               total={activitiesTotal}
             />
+            <Card>
+              <CardContent className="pt-6">
+                <h2>{t('csv.panelTitle')}</h2>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <ImportExpensesButton group={group} onImported={onRevalidate} />
+                  <ExportExpensesButton group={group} />
+                </div>
+              </CardContent>
+            </Card>
           </aside>
         </div>
       </main>
