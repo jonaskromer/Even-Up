@@ -32,7 +32,7 @@ beforeAll(async () => {
 
   const groupRes = await app.inject({
     method: 'POST',
-    url: '/api/groups',
+    url: '/api/v1/groups',
     headers: { authorization: `Bearer ${token}` },
     payload: { name: 'Test Group' },
   });
@@ -50,7 +50,7 @@ describe('POST /api/groups/:groupId/expenses', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       payload: {
         description: 'Test',
         amountCents: 5000,
@@ -69,7 +69,7 @@ describe('POST /api/groups/:groupId/expenses', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Testausgabe',
@@ -87,7 +87,7 @@ describe('POST /api/groups/:groupId/expenses', () => {
 
     const listRes = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -103,7 +103,7 @@ describe('POST /api/groups/:groupId/expenses', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Nur ich',
@@ -128,7 +128,7 @@ describe('POST /api/groups/:groupId/expenses', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Markup test',
@@ -155,7 +155,7 @@ describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {
 
     const createRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Edit-Test',
@@ -169,7 +169,7 @@ describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {
 
     const updateRes = await app.inject({
       method: 'PUT',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${expenseId}`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Edit-Test',
@@ -194,7 +194,7 @@ describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {
 
     const createRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Conflict-Test',
@@ -208,7 +208,7 @@ describe('PUT /api/groups/:groupId/expenses/:expenseId', () => {
 
     const res = await app.inject({
       method: 'PUT',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${expenseId}`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Conflict-Test',
@@ -232,7 +232,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId', () => {
     });
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'SingleFetch',
@@ -247,7 +247,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${expenseId}`,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -255,7 +255,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId', () => {
   it('returns the expense with all expected fields', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${expenseId}`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -270,7 +270,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId', () => {
   it('returns 404 for a non-existent expense id', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses/nonexistent-id-000`,
+      url: `/api/v1/groups/${groupId}/expenses/nonexistent-id-000`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(404);
@@ -281,7 +281,7 @@ describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'DELETE',
-      url: `/api/groups/${groupId}/expenses/some-id`,
+      url: `/api/v1/groups/${groupId}/expenses/some-id`,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -293,7 +293,7 @@ describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
 
     const createRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'ToDelete',
@@ -307,7 +307,7 @@ describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
 
     const deleteRes = await app.inject({
       method: 'DELETE',
-      url: `/api/groups/${groupId}/expenses/${deleteId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${deleteId}`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(deleteRes.statusCode).toBe(204);
@@ -315,7 +315,7 @@ describe('DELETE /api/groups/:groupId/expenses/:expenseId', () => {
     // Verify the expense no longer exists via GET single
     const getRes = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${deleteId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${deleteId}`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(getRes.statusCode).toBe(404);
@@ -365,7 +365,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
 
     const groupRes = await app.inject({
       method: 'POST',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { name: 'Export Test Group' },
     });
@@ -379,7 +379,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
 
     await app.inject({
       method: 'POST',
-      url: `/api/groups/${exportGroupId}/expenses`,
+      url: `/api/v1/groups/${exportGroupId}/expenses`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: {
         description: 'Dinner',
@@ -401,7 +401,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
     // schema must tolerate rather than reject.
     await app.inject({
       method: 'POST',
-      url: `/api/groups/${exportGroupId}/expenses`,
+      url: `/api/v1/groups/${exportGroupId}/expenses`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: {
         description: 'Groceries',
@@ -421,7 +421,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${exportGroupId}/expenses/export`,
+      url: `/api/v1/groups/${exportGroupId}/expenses/export`,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -442,7 +442,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${exportGroupId}/expenses/export`,
+      url: `/api/v1/groups/${exportGroupId}/expenses/export`,
       headers: { authorization: `Bearer ${outsiderToken}` },
     });
     expect(res.statusCode).toBe(403);
@@ -453,7 +453,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
   it('returns CSV in the same wide, email-keyed format expense import reads, excluding line items', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${exportGroupId}/expenses/export`,
+      url: `/api/v1/groups/${exportGroupId}/expenses/export`,
       headers: { authorization: `Bearer ${ownerToken}` },
     });
 
@@ -492,7 +492,7 @@ describe('GET /api/groups/:groupId/expenses/export', () => {
   it('exports an equal-mode split whose stored owedCents sum drifts by a rounding cent, instead of failing validation', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${exportGroupId}/expenses/export`,
+      url: `/api/v1/groups/${exportGroupId}/expenses/export`,
       headers: { authorization: `Bearer ${ownerToken}` },
     });
 

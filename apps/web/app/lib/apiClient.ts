@@ -1,5 +1,15 @@
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:4000';
 
+// Call sites throughout the app write unversioned paths (`/api/groups/...`) — the
+// actual API version is injected here, in one place, so bumping it later never
+// requires touching every component that calls `api.get`/`api.post`/etc.
+// `/api/health` is deliberately excluded: it's an unversioned infra liveness probe.
+const API_VERSION = '/v1';
+function versionPath(path: string): string {
+  if (path === '/api/health' || path.startsWith('/api/health?')) return path;
+  return path.startsWith('/api/') ? `/api${API_VERSION}${path.slice(4)}` : path;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -28,7 +38,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${BASE_URL}${versionPath(path)}`, {
       ...init,
       headers,
       credentials: 'include', // send HttpOnly auth cookies on every request
@@ -59,7 +69,7 @@ export async function postFileStream<TProgress, TResult>(
 ): Promise<TResult> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${BASE_URL}${versionPath(path)}`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
@@ -114,7 +124,7 @@ export async function postFileStream<TProgress, TResult>(
 export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${BASE_URL}${versionPath(path)}`, {
       method: 'GET',
       credentials: 'include',
     });

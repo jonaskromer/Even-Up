@@ -165,10 +165,10 @@ jobs:
           done
           curl -skfL http://localhost/ -o /dev/null
           curl -skf https://localhost/api/health
-          # /api/auth/me requires a real Supabase-issued token, which this CI run has
+          # /api/v1/auth/me requires a real Supabase-issued token, which this CI run has
           # no access to; confirm the auth middleware itself is wired up by checking
           # that an unauthenticated request is rejected.
-          status=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost/api/auth/me)
+          status=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost/api/v1/auth/me)
           [ "$status" = "401" ]
       - name: Dump logs on failure
         if: failure()

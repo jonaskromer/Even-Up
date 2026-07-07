@@ -37,14 +37,14 @@ afterAll(async () => {
 
 describe('GET /api/groups', () => {
   it('returns 401 without auth', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/groups' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/groups' });
     expect(res.statusCode).toBe(401);
   });
 
   it('returns an array for an authenticated user', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -56,7 +56,7 @@ describe('POST /api/groups', () => {
   it('creates a group and returns it with the creator as owner', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${token}` },
       payload: { name: 'Test-Grp-Create' },
     });
@@ -73,7 +73,7 @@ describe('GET /api/groups/:id', () => {
   it('returns the group with members', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}`,
+      url: `/api/v1/groups/${groupId}`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -98,7 +98,7 @@ describe('GET /api/groups/:id', () => {
     });
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}`,
+      url: `/api/v1/groups/${groupId}`,
       headers: { authorization: `Bearer ${outsiderToken}` },
     });
     expect(res.statusCode).toBe(403);
@@ -109,7 +109,7 @@ describe('GET /api/groups/:id/balances', () => {
   it('returns a balances array', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/balances`,
+      url: `/api/v1/groups/${groupId}/balances`,
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -121,7 +121,7 @@ describe('Group currency', () => {
   it('created group includes a currency field', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${token}` },
       payload: { name: 'Test-Grp-Currency' },
     });
@@ -133,7 +133,7 @@ describe('Group currency', () => {
   it('group defaults to EUR when creator has no custom preferredCurrency', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${token}` },
       payload: { name: 'Test-Grp-DefaultCurrency' },
     });
@@ -146,14 +146,14 @@ describe('Group currency', () => {
     // Set preferredCurrency to JPY
     await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
       payload: { preferredCurrency: 'JPY' },
     });
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/groups',
+      url: '/api/v1/groups',
       headers: { authorization: `Bearer ${token}` },
       payload: { name: 'Test-Grp-JPY' },
     });
@@ -163,7 +163,7 @@ describe('Group currency', () => {
     // Reset to EUR so other tests are not affected
     await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
       payload: { preferredCurrency: 'EUR' },
     });

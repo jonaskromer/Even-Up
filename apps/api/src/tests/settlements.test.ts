@@ -45,7 +45,7 @@ beforeAll(async () => {
 
   const groupRes = await app.inject({
     method: 'POST',
-    url: '/api/groups',
+    url: '/api/v1/groups',
     headers: { authorization: `Bearer ${token}` },
     payload: { name: 'Settlement Test Group' },
   });
@@ -53,7 +53,7 @@ beforeAll(async () => {
 
   await app.inject({
     method: 'POST',
-    url: `/api/groups/${groupId}/members`,
+    url: `/api/v1/groups/${groupId}/members`,
     headers: { authorization: `Bearer ${token}` },
     payload: { email: 'test-settle-other@evenup.local' },
   });
@@ -63,13 +63,13 @@ beforeAll(async () => {
   });
   await app.inject({
     method: 'POST',
-    url: `/api/join-requests/${joinRequest.id}/accept`,
+    url: `/api/v1/join-requests/${joinRequest.id}/accept`,
     headers: { authorization: `Bearer ${otherToken}` },
   });
 
   await app.inject({
     method: 'POST',
-    url: `/api/groups/${groupId}/expenses`,
+    url: `/api/v1/groups/${groupId}/expenses`,
     headers: { authorization: `Bearer ${token}` },
     payload: {
       description: 'Dinner',
@@ -91,7 +91,7 @@ describe('POST /api/groups/:id/settlements', () => {
   it('records a settlement', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/settlements`,
+      url: `/api/v1/groups/${groupId}/settlements`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         fromUserId: otherUserId,
@@ -110,7 +110,7 @@ describe('POST /api/groups/:id/settlements', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/settlements`,
+      url: `/api/v1/groups/${groupId}/settlements`,
       payload: {
         fromUserId: otherUserId,
         toUserId: userId,
@@ -127,7 +127,7 @@ describe('GET /api/groups/:id/settle-up', () => {
   it('returns suggested transfers', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/settle-up?simplify=true`,
+      url: `/api/v1/groups/${groupId}/settle-up?simplify=true`,
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -139,7 +139,7 @@ describe('GET /api/groups/:id/settle-up', () => {
   it('settlements reduce outstanding balances', async () => {
     const balancesRes = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/balances`,
+      url: `/api/v1/groups/${groupId}/balances`,
       headers: { authorization: `Bearer ${token}` },
     });
 

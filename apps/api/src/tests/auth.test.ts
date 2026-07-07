@@ -29,7 +29,7 @@ describe('GET /api/auth/me', () => {
   it('returns 401 without token', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
     });
 
     expect(res.statusCode).toBe(401);
@@ -47,7 +47,7 @@ describe('GET /api/auth/me', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -63,7 +63,7 @@ describe('GET /api/auth/me', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       cookies: { sb_access: token },
     });
 
@@ -74,7 +74,7 @@ describe('GET /api/auth/me', () => {
 
 describe('DELETE /api/auth/me', () => {
   it('returns 401 without token', async () => {
-    const res = await app.inject({ method: 'DELETE', url: '/api/auth/me' });
+    const res = await app.inject({ method: 'DELETE', url: '/api/v1/auth/me' });
     expect(res.statusCode).toBe(401);
   });
 
@@ -92,7 +92,7 @@ describe('DELETE /api/auth/me', () => {
 
     const res = await app.inject({
       method: 'DELETE',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -112,7 +112,7 @@ describe('requireAuth lazy user provisioning', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -138,7 +138,7 @@ describe('requireAuth lazy user provisioning', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -163,7 +163,7 @@ describe('PATCH /api/auth/me', () => {
     // Trigger lazy provisioning so the user row exists
     await app.inject({
       method: 'GET',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${patchToken}` },
     });
   });
@@ -171,7 +171,7 @@ describe('PATCH /api/auth/me', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       payload: { name: 'New Name' },
     });
     expect(res.statusCode).toBe(401);
@@ -180,7 +180,7 @@ describe('PATCH /api/auth/me', () => {
   it('updates name successfully', async () => {
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${patchToken}` },
       payload: { name: 'Updated Name' },
     });
@@ -194,7 +194,7 @@ describe('PATCH /api/auth/me', () => {
   it('updates preferredCurrency to USD', async () => {
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${patchToken}` },
       payload: { preferredCurrency: 'USD' },
     });
@@ -208,7 +208,7 @@ describe('PATCH /api/auth/me', () => {
   it('returns 400 for an invalid currency code (length != 3)', async () => {
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${patchToken}` },
       payload: { preferredCurrency: 'USDX' },
     });
@@ -218,7 +218,7 @@ describe('PATCH /api/auth/me', () => {
   it('returns 400 when no updatable fields are provided', async () => {
     const res = await app.inject({
       method: 'PATCH',
-      url: '/api/auth/me',
+      url: '/api/v1/auth/me',
       headers: { authorization: `Bearer ${patchToken}` },
       payload: {},
     });

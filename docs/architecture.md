@@ -63,7 +63,7 @@ routes/
 ├── _index.tsx                                     # / (dashboard)
 ├── login.tsx                                      # /login (email/password + Google + passkey)
 ├── register.tsx                                   # /register
-├── forgot-password.tsx                            # /forgot-password (POST /api/auth/forgot-password)
+├── forgot-password.tsx                            # /forgot-password (POST /api/v1/auth/forgot-password)
 ├── reset-password.tsx                             # /reset-password (client-side Supabase exchange, see ADR 005)
 ├── auth.callback.tsx                              # /auth/callback (fallback landing for client-side OAuth redirects)
 ├── settings.tsx                                   # /settings (profile, currency, markup rate, password, passkeys, delete account)
@@ -84,7 +84,7 @@ All auth is handled through the Fastify BFF. The browser never sees a token — 
 ```
 Browser                    Fastify BFF                  Supabase Auth
   │                             │                             │
-  │ POST /api/auth/login        │                             │
+  │ POST /api/v1/auth/login        │                             │
   │ {email, password}           │                             │
   │────────────────────────────►│                             │
   │                             │ POST /auth/v1/token         │
@@ -95,7 +95,7 @@ Browser                    Fastify BFF                  Supabase Auth
   │ Set-Cookie: sb_refresh (30d)│                             │
   │◄────────────────────────────│                             │
   │                             │                             │
-  │ GET /api/groups (cookie)    │                             │
+  │ GET /api/v1/groups (cookie)    │                             │
   │────────────────────────────►│                             │
   │                             │ requireAuth:                │
   │                             │  read sb_access cookie      │
@@ -111,14 +111,14 @@ Browser                    Fastify BFF                  Supabase Auth
 ```
 Browser                    Fastify BFF                  Supabase Auth / Google
   │                             │                             │
-  │ GET /api/auth/google        │                             │
+  │ GET /api/v1/auth/google        │                             │
   │────────────────────────────►│ generate PKCE verifier      │
   │                             │ store as HttpOnly cookie    │
   │ 302 → Supabase OAuth URL   │──────────────────────────────────────►
   │◄────────────────────────────│                             │
   │ (browser redirects to Google — user logs in)
   │                             │                             │
-  │ GET /api/auth/callback?code=│                             │
+  │ GET /api/v1/auth/callback?code=│                             │
   │────────────────────────────►│ read pkce_verifier cookie   │
   │                             │ exchange code+verifier      │
   │                             │──────────────────────────────────────►
@@ -131,11 +131,11 @@ Browser                    Fastify BFF                  Supabase Auth / Google
 
 **Session lifecycle:**
 
-1. Login/register: browser posts credentials to `POST /api/auth/login` (or `/register`). Fastify calls Supabase REST directly and sets `sb_access` (1h TTL) + `sb_refresh` (30d TTL) as `HttpOnly; Secure; SameSite=Lax` cookies.
+1. Login/register: browser posts credentials to `POST /api/v1/auth/login` (or `/register`). Fastify calls Supabase REST directly and sets `sb_access` (1h TTL) + `sb_refresh` (30d TTL) as `HttpOnly; Secure; SameSite=Lax` cookies.
 2. Every subsequent API request sends the cookies automatically (browser manages them). `requireAuth` reads `sb_access`, verifies the JWT via JWKS — no network call to Supabase per request.
 3. If `sb_access` is expired but `sb_refresh` is present, `requireAuth` transparently refreshes the session and sets new cookies. The client sees a normal `200`.
-4. `AuthContext` on the frontend calls `GET /api/auth/me` once on mount to hydrate the `user` object. It never calls Supabase JS SDK auth methods for login/logout (those go through the BFF).
-5. Logout: `POST /api/auth/logout` clears both cookies server-side.
+4. `AuthContext` on the frontend calls `GET /api/v1/auth/me` once on mount to hydrate the `user` object. It never calls Supabase JS SDK auth methods for login/logout (those go through the BFF).
+5. Logout: `POST /api/v1/auth/logout` clears both cookies server-side.
 6. `supabase-js` on the frontend is configured with `persistSession: false, autoRefreshToken: false, detectSessionInUrl: false` — it never writes to localStorage.
 
 ### Component Hierarchy
@@ -302,7 +302,7 @@ Both the API (server-side `schema.parse(req.body)`) and the frontend (type impor
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Password storage**                 | Owned by Supabase Auth (Cloud) — this app never sees or stores a password                                                                                                                                                 |
 | **Session tokens**                   | HttpOnly cookies (`sb_access` 1h, `sb_refresh` 30d) — never accessible from JavaScript. JWT in `sb_access` verified via `jose`/JWKS; no per-request network call to Supabase.                                             |
-| **Route protection (client)**        | `requireAuth()` in every `clientLoader` — calls `GET /api/auth/me`, returns the full `AuthUser` (including `defaultMarkupRate`) for deterministic loader data; throws `redirect('/login')` on 401                         |
+| **Route protection (client)**        | `requireAuth()` in every `clientLoader` — calls `GET /api/v1/auth/me`, returns the full `AuthUser` (including `defaultMarkupRate`) for deterministic loader data; throws `redirect('/login')` on 401                         |
 | **Route protection (server)**        | `requireAuth` Fastify preHandler — verifies the Supabase JWT, lazily upserts the local `User` row, attaches `req.user`                                                                                                    |
 | **Authorization**                    | `requireGroupMember` preHandler — checks `GroupMember` table, throws 403                                                                                                                                                  |
 | **Input validation**                 | Zod `.parse()` on all mutation endpoints — rejects malformed input before DB access                                                                                                                                       |
@@ -316,7 +316,7 @@ Both the API (server-side `schema.parse(req.body)`) and the frontend (type impor
 
 ## Testing Strategy
 
-### API Tests (98 tests, Vitest + `app.inject()`)
+### API Tests (104 tests, Vitest + `app.inject()`)
 
 The API tests use Fastify's `app.inject()` method for in-process HTTP testing — no network layer, no port binding, no supertest dependency.
 
@@ -333,6 +333,7 @@ The API tests use Fastify's `app.inject()` method for in-process HTTP testing �
 | `settlements.test.ts`        | 4     | Record settlement → 201, 401 without auth, settle-up suggestions, balance zeroed after settlement                                                                                 |
 | `geminiReceipt.test.ts`      | 10    | Parses well-formed response, sends `responseSchema`/inlineData, 422 on non-JSON/invalid schema, retries primary 3× before falling back, succeeds on retry without fallback, 503 when both exhausted, progress callback sequence |
 | `receipts.test.ts`           | 17    | `/parse` streams NDJSON progress + result/error events (incl. CORS header regression check), 400 on non-image, create/update with equal/exact/percent/shares per-item modes, excluded items skipped, 422 on bad sums or non-member, 403 for non-member, `GET /expenses/:id` includes `lineItems` |
+| `openapi.test.ts`            | 6     | Static OpenAPI doc served with no auth, request-body schema reused from real Zod schemas, Swagger UI page renders; business endpoints live under `/api/v1`, `/api/health` stays unversioned, the old bare `/api/groups` 404s |
 
 ### Frontend Tests (68 tests, Vitest + React Testing Library)
 
