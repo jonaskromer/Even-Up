@@ -52,8 +52,8 @@ A web application for splitting expenses fairly among groups. Create groups for 
   (`sb_access` 1h, `sb_refresh` 30d), never a token in JavaScript; the BFF talks to
   Supabase Auth's REST API directly and transparently refreshes an expired access
   token using the refresh cookie — see [ADR 005](docs/adr/005-bff-session-management.md)
-- **Google sign-in** via server-side PKCE OAuth (`/api/auth/google` → Supabase → Google
-  → `/api/auth/callback`) — the browser only follows redirects, never sees a token
+- **Google sign-in** via server-side PKCE OAuth (`/api/v1/auth/google` → Supabase → Google
+  → `/api/v1/auth/callback`) — the browser only follows redirects, never sees a token
 - **Passkey (WebAuthn)** sign-in and registration via `supabase-js`, configured with
   `persistSession: false` so it never touches `localStorage`
 - Local `User` row is lazily provisioned (`upsert`) on the first authenticated request
@@ -170,7 +170,7 @@ or password-reset-token table in this app's schema.
 
 ### CSV Export Row Schema
 
-`GET /api/groups/:id/expenses/export` (see [API Endpoints](#expenses)) exports in the
+`GET /api/v1/groups/:id/expenses/export` (see [API Endpoints](#expenses)) exports in the
 same wide, Splitwise-style format expense **import** already reads (see
 [UI & Quality of Life](#ui--quality-of-life)) — `Date,Description,Cost,` followed by
 one column per group member — so a group's data round-trips between the two. Each
@@ -216,81 +216,81 @@ details of every endpoint below.
 
 | Method | Path                          | Description                                       |
 | ------ | ----------------------------- | -------------------------------------------------- |
-| POST   | `/api/auth/register`          | Create account, sets session cookies                |
-| POST   | `/api/auth/login`              | Email/password login                                |
-| POST   | `/api/auth/logout`             | Clear session cookies                               |
-| POST   | `/api/auth/refresh`            | Refresh the access token using the refresh cookie   |
-| GET    | `/api/auth/google`             | Start server-side PKCE Google OAuth flow            |
-| GET    | `/api/auth/callback`           | Google OAuth callback, sets session cookies         |
-| POST   | `/api/auth/exchange`           | Exchange a client-side token pair (passkeys) for cookies |
-| POST   | `/api/auth/forgot-password`    | Send a Supabase password-reset email                |
-| GET    | `/api/auth/session-tokens`     | Expose current cookie tokens (WebAuthn enrollment only) |
-| GET    | `/api/auth/me`                 | Current user profile (includes `defaultMarkupRate`) |
-| PATCH  | `/api/auth/me`                 | Update name, language, preferred currency, or `defaultMarkupRate` |
-| POST   | `/api/auth/change-password`    | Change password via the current session             |
-| DELETE | `/api/auth/me`                 | Delete account (`409` if shared financial records exist) |
+| POST   | `/api/v1/auth/register`          | Create account, sets session cookies                |
+| POST   | `/api/v1/auth/login`              | Email/password login                                |
+| POST   | `/api/v1/auth/logout`             | Clear session cookies                               |
+| POST   | `/api/v1/auth/refresh`            | Refresh the access token using the refresh cookie   |
+| GET    | `/api/v1/auth/google`             | Start server-side PKCE Google OAuth flow            |
+| GET    | `/api/v1/auth/callback`           | Google OAuth callback, sets session cookies         |
+| POST   | `/api/v1/auth/exchange`           | Exchange a client-side token pair (passkeys) for cookies |
+| POST   | `/api/v1/auth/forgot-password`    | Send a Supabase password-reset email                |
+| GET    | `/api/v1/auth/session-tokens`     | Expose current cookie tokens (WebAuthn enrollment only) |
+| GET    | `/api/v1/auth/me`                 | Current user profile (includes `defaultMarkupRate`) |
+| PATCH  | `/api/v1/auth/me`                 | Update name, language, preferred currency, or `defaultMarkupRate` |
+| POST   | `/api/v1/auth/change-password`    | Change password via the current session             |
+| DELETE | `/api/v1/auth/me`                 | Delete account (`409` if shared financial records exist) |
 
 ### Groups
 
 | Method | Path                       | Description                                             |
 | ------ | -------------------------- | ------------------------------------------------------- |
-| GET    | `/api/groups`              | List user's groups                                      |
-| POST   | `/api/groups`              | Create group                                            |
-| GET    | `/api/groups/:id`          | Group detail                                            |
-| POST   | `/api/groups/:id/members`  | Invite member by email (creates a pending join request) |
-| GET    | `/api/groups/:id/balances` | Net balances per member                                 |
+| GET    | `/api/v1/groups`              | List user's groups                                      |
+| POST   | `/api/v1/groups`              | Create group                                            |
+| GET    | `/api/v1/groups/:id`          | Group detail                                            |
+| POST   | `/api/v1/groups/:id/members`  | Invite member by email (creates a pending join request) |
+| GET    | `/api/v1/groups/:id/balances` | Net balances per member                                 |
 
 ### Expenses
 
 | Method | Path                            | Description                |
 | ------ | ------------------------------- | -------------------------- |
-| GET    | `/api/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
-| POST   | `/api/groups/:id/expenses`      | Create expense with splits (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
-| GET    | `/api/groups/:id/expenses/:eid` | Single expense (used by edit route) — includes `lineItems`/`receiptStoreName` for receipt-created expenses |
-| PUT    | `/api/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
-| DELETE | `/api/groups/:id/expenses/:eid` | Delete expense             |
-| GET    | `/api/groups/:id/expenses/export` | Export every expense + its splits as CSV (one row per expense/member pair, no line items) — see [Data Model](#data-model) for the row schema and `docs/api-reference.md` for the full column reference |
+| GET    | `/api/v1/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
+| POST   | `/api/v1/groups/:id/expenses`      | Create expense with splits (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
+| GET    | `/api/v1/groups/:id/expenses/:eid` | Single expense (used by edit route) — includes `lineItems`/`receiptStoreName` for receipt-created expenses |
+| PUT    | `/api/v1/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
+| DELETE | `/api/v1/groups/:id/expenses/:eid` | Delete expense             |
+| GET    | `/api/v1/groups/:id/expenses/export` | Export every expense + its splits as CSV (one row per expense/member pair, no line items) — see [Data Model](#data-model) for the row schema and `docs/api-reference.md` for the full column reference |
 
 ### Settlements
 
 | Method | Path                                         | Description              |
 | ------ | --------------------------------------------- | ------------------------- |
-| GET    | `/api/groups/:id/settlements`                | List recorded settlements |
-| POST   | `/api/groups/:id/settlements`                | Record a settlement       |
-| PUT    | `/api/groups/:id/settlements/:settlementId`  | Update a settlement       |
-| DELETE | `/api/groups/:id/settlements/:settlementId`  | Delete a settlement       |
-| GET    | `/api/groups/:id/settle-up?simplify=true`    | Suggested transfers       |
+| GET    | `/api/v1/groups/:id/settlements`                | List recorded settlements |
+| POST   | `/api/v1/groups/:id/settlements`                | Record a settlement       |
+| PUT    | `/api/v1/groups/:id/settlements/:settlementId`  | Update a settlement       |
+| DELETE | `/api/v1/groups/:id/settlements/:settlementId`  | Delete a settlement       |
+| GET    | `/api/v1/groups/:id/settle-up?simplify=true`    | Suggested transfers       |
 
 ### Receipts (AI-assisted expense creation)
 
 | Method | Path                                    | Description                                                                                             |
 | ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/groups/:id/receipts/parse`        | Upload a receipt image; streams retry/fallback progress, then the extracted store/line items (NDJSON)    |
-| POST   | `/api/groups/:id/receipts`              | Create one expense from reviewed line items + per-item splits                                             |
-| PUT    | `/api/groups/:id/receipts/:expenseId`   | Replace an expense's line items + splits                                                                  |
+| POST   | `/api/v1/groups/:id/receipts/parse`        | Upload a receipt image; streams retry/fallback progress, then the extracted store/line items (NDJSON)    |
+| POST   | `/api/v1/groups/:id/receipts`              | Create one expense from reviewed line items + per-item splits                                             |
+| PUT    | `/api/v1/groups/:id/receipts/:expenseId`   | Replace an expense's line items + splits                                                                  |
 
 ### Invites
 
 | Method | Path                         | Description                         |
 | ------ | ---------------------------- | ----------------------------------- |
-| POST   | `/api/groups/:id/invites`    | Generate invite link (7-day expiry) |
-| POST   | `/api/invites/:token/accept` | Accept invite and join group        |
+| POST   | `/api/v1/groups/:id/invites`    | Generate invite link (7-day expiry) |
+| POST   | `/api/v1/invites/:token/accept` | Accept invite and join group        |
 
 ### Activities
 
 | Method | Path                         | Description                         |
 | ------ | ---------------------------- | ----------------------------------- |
-| GET    | `/api/activities`            | Activity events across all of the user's groups (paginated, powers the dashboard's global feed) |
-| GET    | `/api/groups/:id/activities` | Activity events for a group (paginated, `?limit=20&offset=0`) |
+| GET    | `/api/v1/activities`            | Activity events across all of the user's groups (paginated, powers the dashboard's global feed) |
+| GET    | `/api/v1/groups/:id/activities` | Activity events for a group (paginated, `?limit=20&offset=0`) |
 
 ### Join Requests
 
 | Method | Path                             | Description                              |
 | ------ | -------------------------------- | ---------------------------------------- |
-| GET    | `/api/groups/:id/join-requests`  | Pending outgoing invites for a group     |
-| GET    | `/api/join-requests`             | Current user's pending incoming requests |
-| POST   | `/api/join-requests/:id/accept`  | Accept a request and join the group      |
-| POST   | `/api/join-requests/:id/decline` | Decline a request                        |
+| GET    | `/api/v1/groups/:id/join-requests`  | Pending outgoing invites for a group     |
+| GET    | `/api/v1/join-requests`             | Current user's pending incoming requests |
+| POST   | `/api/v1/join-requests/:id/accept`  | Accept a request and join the group      |
+| POST   | `/api/v1/join-requests/:id/decline` | Decline a request                        |
 
 ---
 
@@ -361,7 +361,7 @@ details of every endpoint below.
 │   │   │   └── seed.ts
 │   │   └── prisma.config.ts   # Prisma 7 config (datasource URL for migrations)
 │   ├── web-static/             # M1 HTML/CSS prototype (archive)
-│   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/auth/me
+│   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/v1/auth/me
 ├── packages/
 │   └── shared/                 # Zod schemas (group, expense, settlement, receipt,
 │                                # expenseExport)
@@ -453,7 +453,7 @@ npm run dev                     # Vite on http://localhost:5173
 
 ```bash
 # From repo root, per workspace
-npm test --workspace=apps/api   # API: auth, expenses (incl. CSV export), balances, settlements, debt simplification, join requests, exchange rates, receipts, Gemini parsing (98 tests)
+npm test --workspace=apps/api   # API: auth, expenses (incl. CSV export), balances, settlements, debt simplification, join requests, exchange rates, receipts, Gemini parsing, OpenAPI/versioning (104 tests)
 npm test --workspace=apps/web   # Frontend: utils, computeBalances, computePerCurrencyBalances, receiptSplits, ExpenseItem, ExportExpensesButton, AddExpenseForm, LoadingState, ErrorState, receipt route loader (68 tests)
 npm run test:e2e                # Playwright E2E (auth, dashboard) — requires `npx playwright install` once
 ```
@@ -510,8 +510,8 @@ Two emails are sent via Resend directly by this app, in
 
 | Email                 | Sent when                            | Behavior without `RESEND_API_KEY`                           |
 | --------------------- | ------------------------------------ | ----------------------------------------------------------- |
-| Join request invite   | `POST /api/groups/:id/members`       | Not sent — invitee only sees it via the bell                |
-| Join request accepted | `POST /api/join-requests/:id/accept` | Not sent — inviter only sees it in the group's activity log |
+| Join request invite   | `POST /api/v1/groups/:id/members`       | Not sent — invitee only sees it via the bell                |
+| Join request accepted | `POST /api/v1/join-requests/:id/accept` | Not sent — inviter only sees it in the group's activity log |
 
 Both are fire-and-forget — a failed send is logged server-side but never blocks or
 fails the underlying request. They share one branded HTML template (table-based
@@ -571,7 +571,7 @@ docker compose -f docker-compose.prod.yml logs -f api
 
 ### Health Check
 
-`GET /api/health` returns `{ "status": "ok" }`, no authentication required. Used by the Docker Compose healthcheck for the `api` service; also suitable for external uptime monitoring.
+`GET /api/health` returns `{ "status": "ok" }`, no authentication required — deliberately unversioned since it's infra-facing, not part of the `/api/v1/*` client API contract. Used by the Docker Compose healthcheck for the `api` service; also suitable for external uptime monitoring.
 
 ### CI Pipeline
 
@@ -712,7 +712,7 @@ self-hosted Postgres + Prisma database for all application data. See
       request — no signup webhook needed
 - [x] `passwordHash` column and `PasswordResetToken` table dropped; `User.id` is now the
       Supabase Auth UUID
-- [x] `/api/auth/register`, `/login`, `/forgot-password`, `/reset-password` removed
+- [x] `/api/v1/auth/register`, `/login`, `/forgot-password`, `/reset-password` removed
       (kept `/me`); app-side `sendWelcomeEmail`/`sendPasswordResetEmail` removed
 - [x] Supabase's confirmation/reset emails routed through the existing Resend account
       (custom SMTP) with branded templates — exactly one signup email, not two
@@ -760,6 +760,7 @@ self-hosted Postgres + Prisma database for all application data. See
 | [ADR 011 — Credit Card FX Markup](docs/adr/011-credit-card-fx-markup.md)               | Per-user default + per-expense override markup percentage applied post-conversion                             |
 | [ADR 012 — Receipt AI Parsing](docs/adr/012-receipt-ai-parsing.md)                     | Gemini OCR with retry/fallback models, streamed progress, normalized line-item schema, per-item split modes    |
 | [ADR 013 — CSV Export Format](docs/adr/013-csv-export-format.md)                       | Export matches import's wide, Splitwise-style format; members keyed by email, not id/name; rounding-drift tolerance |
+| [ADR 014 — API Versioning & OpenAPI](docs/adr/014-api-versioning-and-openapi.md)        | `/api/v1` URL-path versioning centralized in one frontend helper; static OpenAPI spec reusing real Zod schemas via `z.toJSONSchema()` |
 
 ---
 

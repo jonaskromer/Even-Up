@@ -32,7 +32,7 @@ test.describe('login page', () => {
   });
 
   test('shows an error alert on invalid credentials', async ({ page }) => {
-    await page.route('**/api/auth/login', (route) =>
+    await page.route('**/api/v1/auth/login', (route) =>
       route.fulfill({
         status: 401,
         contentType: 'application/json',

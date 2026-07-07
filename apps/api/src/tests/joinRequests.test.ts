@@ -58,7 +58,7 @@ beforeAll(async () => {
 
   const groupRes = await app.inject({
     method: 'POST',
-    url: '/api/groups',
+    url: '/api/v1/groups',
     headers: { authorization: `Bearer ${ownerToken}` },
     payload: { name: 'JoinRequest Test Group' },
   });
@@ -76,7 +76,7 @@ describe('POST /api/groups/:id/members', () => {
   it('creates a pending join request instead of adding the member directly', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/members`,
+      url: `/api/v1/groups/${groupId}/members`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { email: 'test-joinreq-invitee@evenup.local' },
     });
@@ -86,7 +86,7 @@ describe('POST /api/groups/:id/members', () => {
 
     const group = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}`,
+      url: `/api/v1/groups/${groupId}`,
       headers: { authorization: `Bearer ${ownerToken}` },
     });
     const memberIds = group.json().members.map((m: { id: string }) => m.id);
@@ -101,7 +101,7 @@ describe('POST /api/groups/:id/members', () => {
   it('rejects a duplicate invite while one is already pending', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/members`,
+      url: `/api/v1/groups/${groupId}/members`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { email: 'test-joinreq-invitee@evenup.local' },
     });
@@ -112,7 +112,7 @@ describe('POST /api/groups/:id/members', () => {
   it('rejects inviting yourself', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/members`,
+      url: `/api/v1/groups/${groupId}/members`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { email: 'test-joinreq-owner@evenup.local' },
     });
@@ -125,7 +125,7 @@ describe('GET /api/join-requests', () => {
   it("lists the invitee's pending request with group and inviter names", async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/join-requests',
+      url: '/api/v1/join-requests',
       headers: { authorization: `Bearer ${inviteeToken}` },
     });
 
@@ -146,7 +146,7 @@ describe('POST /api/join-requests/:id/accept', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/join-requests/${request.id}/accept`,
+      url: `/api/v1/join-requests/${request.id}/accept`,
       headers: { authorization: `Bearer ${outsiderToken}` },
     });
 
@@ -160,7 +160,7 @@ describe('POST /api/join-requests/:id/accept', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/join-requests/${request.id}/accept`,
+      url: `/api/v1/join-requests/${request.id}/accept`,
       headers: { authorization: `Bearer ${inviteeToken}` },
     });
 
@@ -168,7 +168,7 @@ describe('POST /api/join-requests/:id/accept', () => {
 
     const group = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}`,
+      url: `/api/v1/groups/${groupId}`,
       headers: { authorization: `Bearer ${ownerToken}` },
     });
     const memberIds = group.json().members.map((m: { id: string }) => m.id);
@@ -180,7 +180,7 @@ describe('POST /api/join-requests/:id/accept', () => {
     // Already a member now -> re-inviting is rejected for a different reason (409 already-member)
     const reinvite = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/members`,
+      url: `/api/v1/groups/${groupId}/members`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { email: 'test-joinreq-invitee@evenup.local' },
     });
@@ -192,7 +192,7 @@ describe('POST /api/join-requests/:id/decline', () => {
   it('marks the request declined without creating a membership', async () => {
     const inviteRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/members`,
+      url: `/api/v1/groups/${groupId}/members`,
       headers: { authorization: `Bearer ${ownerToken}` },
       payload: { email: 'test-joinreq-outsider@evenup.local' },
     });
@@ -204,7 +204,7 @@ describe('POST /api/join-requests/:id/decline', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/join-requests/${request.id}/decline`,
+      url: `/api/v1/join-requests/${request.id}/decline`,
       headers: { authorization: `Bearer ${outsiderToken}` },
     });
 
@@ -215,7 +215,7 @@ describe('POST /api/join-requests/:id/decline', () => {
 
     const group = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}`,
+      url: `/api/v1/groups/${groupId}`,
       headers: { authorization: `Bearer ${ownerToken}` },
     });
     const memberIds = group.json().members.map((m: { id: string }) => m.id);

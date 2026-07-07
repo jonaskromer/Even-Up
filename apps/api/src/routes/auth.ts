@@ -144,14 +144,14 @@ export async function authRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const verifier = generateVerifier();
       const challenge = generateChallenge(verifier);
-      const callbackUrl = `${env.APP_URL ?? `${req.protocol}://${req.hostname}`}/api/auth/callback`;
+      const callbackUrl = `${env.APP_URL ?? `${req.protocol}://${req.hostname}`}/api/v1/auth/callback`;
       const oauthUrl = buildOAuthUrl(env.SUPABASE_URL, 'google', callbackUrl, challenge);
 
       reply.setCookie('pkce_verifier', verifier, {
         httpOnly: true,
         secure: SECURE_COOKIE,
         sameSite: 'lax',
-        path: '/api/auth/callback',
+        path: '/api/v1/auth/callback',
         maxAge: 60 * 10, // 10 minutes
       });
 
@@ -184,7 +184,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       setAuthCookies(reply, tokens.access_token, tokens.refresh_token);
-      reply.clearCookie('pkce_verifier', { path: '/api/auth/callback' });
+      reply.clearCookie('pkce_verifier', { path: '/api/v1/auth/callback' });
 
       return reply.redirect(env.APP_URL ?? '/');
     },

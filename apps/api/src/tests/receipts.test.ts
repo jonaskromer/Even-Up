@@ -79,7 +79,7 @@ beforeAll(async () => {
 
   const groupRes = await app.inject({
     method: 'POST',
-    url: '/api/groups',
+    url: '/api/v1/groups',
     headers: { authorization: `Bearer ${token}` },
     payload: { name: 'Receipt Test Group' },
   });
@@ -99,7 +99,7 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts/parse`,
+      url: `/api/v1/groups/${groupId}/receipts/parse`,
     });
     expect(res.statusCode).toBe(401);
   });
@@ -114,7 +114,7 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts/parse`,
+      url: `/api/v1/groups/${groupId}/receipts/parse`,
       headers: {
         authorization: `Bearer ${token}`,
         origin: 'http://localhost:5173',
@@ -164,7 +164,7 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts/parse`,
+      url: `/api/v1/groups/${groupId}/receipts/parse`,
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': `multipart/form-data; boundary=${boundary}`,
@@ -195,7 +195,7 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts/parse`,
+      url: `/api/v1/groups/${groupId}/receipts/parse`,
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': `multipart/form-data; boundary=${boundary}`,
@@ -219,7 +219,7 @@ describe('POST /api/groups/:groupId/receipts/parse', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts/parse`,
+      url: `/api/v1/groups/${groupId}/receipts/parse`,
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': `multipart/form-data; boundary=${boundary}`,
@@ -235,7 +235,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('returns 401 without auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       payload: {},
     });
     expect(res.statusCode).toBe(401);
@@ -244,7 +244,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('creates one expense with line items and correctly split assignments', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Rewe',
@@ -298,7 +298,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('supports per-item exact split mode', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Exact Split',
@@ -332,7 +332,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('returns 422 when per-item exact amounts do not sum to the item price', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Bad Exact Split',
@@ -360,7 +360,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('supports per-item percent split mode', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Percent Split',
@@ -392,7 +392,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('returns 422 when per-item percentages do not sum to 100', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Bad Percent Split',
@@ -420,7 +420,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('supports per-item equal split mode', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Equal Split',
@@ -453,7 +453,7 @@ describe('POST /api/groups/:groupId/receipts', () => {
   it('returns 422 when an assignment references a non-member', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Bad Assignment',
@@ -479,7 +479,7 @@ describe('PUT /api/groups/:groupId/receipts/:expenseId', () => {
   it('replaces line items and splits (delete-all + create-many semantics)', async () => {
     const createRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Edit Me',
@@ -501,7 +501,7 @@ describe('PUT /api/groups/:groupId/receipts/:expenseId', () => {
 
     const updateRes = await app.inject({
       method: 'PUT',
-      url: `/api/groups/${groupId}/receipts/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/receipts/${expenseId}`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Edit Me',
@@ -539,7 +539,7 @@ describe('PUT /api/groups/:groupId/receipts/:expenseId', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${outsiderToken}` },
       payload: {
         storeName: 'X',
@@ -565,7 +565,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId — lineItems inclusion',
   it('includes lineItems/assignments for a receipt-created expense', async () => {
     const createRes = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/receipts`,
+      url: `/api/v1/groups/${groupId}/receipts`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         storeName: 'Fetch Me',
@@ -586,7 +586,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId — lineItems inclusion',
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/groups/${groupId}/expenses/${expenseId}`,
+      url: `/api/v1/groups/${groupId}/expenses/${expenseId}`,
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -600,7 +600,7 @@ describe('GET /api/groups/:groupId/expenses/:expenseId — lineItems inclusion',
   it('returns an empty lineItems array for a plain expense', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/api/groups/${groupId}/expenses`,
+      url: `/api/v1/groups/${groupId}/expenses`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
         description: 'Plain expense',

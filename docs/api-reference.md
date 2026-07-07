@@ -7,13 +7,25 @@ the frontend client never needs a configured API URL there.
 
 All endpoints return JSON. All mutation endpoints validate input with Zod schemas from `@evenup/shared`. Monetary values are always in **integer cents**.
 
+**Versioning:** every endpoint below is shown with its actual path, `/api/v1/...`,
+except `/api/health` — deliberately unversioned since it's an infra-facing
+liveness probe, not part of the client API contract. See
+[ADR 014](adr/014-api-versioning-and-openapi.md).
+
+**Interactive docs:** an OpenAPI 3.0 spec is served at `GET /api/docs/json`, with a
+browsable Swagger UI at `/api/docs` (both unversioned, alongside `/api/health` —
+they describe the API rather than being part of its versioned contract).
+
 ---
 
 ## Health
 
 ### GET `/api/health`
 
-Liveness probe, no authentication required. Used by the Docker Compose healthcheck for the `api` service.
+Liveness probe, no authentication required. Deliberately unversioned — it's an
+infra-facing endpoint (Docker healthcheck, uptime monitoring), not part of the
+versioned client API contract in `/api/v1/*` below. Used by the Docker Compose
+healthcheck for the `api` service.
 
 **Response `200`:**
 
@@ -29,7 +41,7 @@ All auth is managed by the Fastify BFF. The browser communicates only via HttpOn
 
 All auth endpoints are rate-limited (values shown per endpoint). Cookie names: `sb_access` (1h TTL, JWT), `sb_refresh` (30d TTL).
 
-### POST `/api/auth/register`
+### POST `/api/v1/auth/register`
 
 Register a new account. Creates the Supabase Auth user and, if email confirmation is disabled, immediately sets session cookies.
 
@@ -53,7 +65,7 @@ If email confirmation is required: `{ "needsEmailConfirmation": true }` — no c
 
 ---
 
-### POST `/api/auth/login`
+### POST `/api/v1/auth/login`
 
 Email/password login. Sets `sb_access` and `sb_refresh` cookies on success.
 
@@ -75,7 +87,7 @@ Email/password login. Sets `sb_access` and `sb_refresh` cookies on success.
 
 ---
 
-### POST `/api/auth/logout`
+### POST `/api/v1/auth/logout`
 
 Clear session cookies. Requires an authenticated session.
 
@@ -85,7 +97,7 @@ Clear session cookies. Requires an authenticated session.
 
 ---
 
-### POST `/api/auth/refresh`
+### POST `/api/v1/auth/refresh`
 
 Refresh the access token using the `sb_refresh` cookie. Sets new `sb_access` and `sb_refresh` cookies.
 
@@ -101,7 +113,7 @@ Refresh the access token using the `sb_refresh` cookie. Sets new `sb_access` and
 
 ---
 
-### GET `/api/auth/google`
+### GET `/api/v1/auth/google`
 
 Initiates server-side PKCE OAuth flow for Google sign-in. Generates a PKCE verifier, stores it as an HttpOnly cookie (`pkce_verifier`, 10min), and redirects to the Supabase Google OAuth URL.
 
@@ -111,7 +123,7 @@ Initiates server-side PKCE OAuth flow for Google sign-in. Generates a PKCE verif
 
 ---
 
-### GET `/api/auth/callback`
+### GET `/api/v1/auth/callback`
 
 OAuth PKCE callback (called by Supabase after Google login). Reads `pkce_verifier` cookie and the `?code=` query parameter, exchanges them for tokens, and sets session cookies.
 
@@ -121,7 +133,7 @@ OAuth PKCE callback (called by Supabase after Google login). Reads `pkce_verifie
 
 ---
 
-### POST `/api/auth/exchange`
+### POST `/api/v1/auth/exchange`
 
 Exchange a client-side token pair (e.g., from passkey sign-in) for HttpOnly session cookies. Verifies the `access_token` before accepting it.
 
@@ -143,7 +155,7 @@ Exchange a client-side token pair (e.g., from passkey sign-in) for HttpOnly sess
 
 ---
 
-### POST `/api/auth/forgot-password`
+### POST `/api/v1/auth/forgot-password`
 
 Send a password-reset email via Supabase. Always returns `200` regardless of whether the email exists (no user enumeration).
 
@@ -163,7 +175,7 @@ Send a password-reset email via Supabase. Always returns `200` regardless of whe
 
 ---
 
-### GET `/api/auth/session-tokens`
+### GET `/api/v1/auth/session-tokens`
 
 Return the current session tokens from HttpOnly cookies in the response body. Used exclusively for WebAuthn passkey enrollment (the Supabase JS SDK must temporarily hold a live session for the WebAuthn ceremony). Requires authentication.
 
@@ -179,7 +191,7 @@ Return the current session tokens from HttpOnly cookies in the response body. Us
 
 ---
 
-### GET `/api/auth/me`
+### GET `/api/v1/auth/me`
 
 Return the current user profile. On the first authenticated request for a given Supabase user, the local `User` row is lazily created (`upsert`, keyed on the token's `sub`).
 
@@ -199,7 +211,7 @@ Return the current user profile. On the first authenticated request for a given 
 
 ---
 
-### PATCH `/api/auth/me`
+### PATCH `/api/v1/auth/me`
 
 Update display name, language preference, and/or preferred currency. Also syncs name and lang to Supabase `user_metadata` so email templates can use them.
 
@@ -227,7 +239,7 @@ Returned only if the request updated at least one field stored on the local `Use
 
 ---
 
-### POST `/api/auth/change-password`
+### POST `/api/v1/auth/change-password`
 
 Change the authenticated user's password by calling Supabase Auth with the current session token.
 
@@ -249,7 +261,7 @@ Change the authenticated user's password by calling Supabase Auth with the curre
 
 ---
 
-### DELETE `/api/auth/me`
+### DELETE `/api/v1/auth/me`
 
 Delete the authenticated user's account and all their data. Fails with `409` if the user has created expenses or settlements that other members depend on.
 
@@ -265,7 +277,7 @@ Delete the authenticated user's account and all their data. Fails with `409` if 
 
 All group endpoints require an authenticated session (cookie).
 
-### GET `/api/groups`
+### GET `/api/v1/groups`
 
 List all groups the authenticated user is a member of.
 
@@ -289,7 +301,7 @@ List all groups the authenticated user is a member of.
 `receiptsEnabled` reflects whether `GEMINI_API_KEY` is configured server-side — the
 frontend hides the "Add Receipt" button when `false`.
 
-### POST `/api/groups`
+### POST `/api/v1/groups`
 
 Create a new group. The authenticated user becomes the owner. The group's base `currency` is set from the creator's `preferredCurrency` (defaults to `"EUR"` if none is set).
 
@@ -301,7 +313,7 @@ Create a new group. The authenticated user becomes the owner. The group's base `
 
 **Response `201`:** Group object (same shape as GET)
 
-### GET `/api/groups/:id`
+### GET `/api/v1/groups/:id`
 
 Get a single group with its members. Requires group membership.
 
@@ -309,7 +321,7 @@ Get a single group with its members. Requires group membership.
 
 **Errors:** `403` not a member, `404` group not found
 
-### POST `/api/groups/:id/members`
+### POST `/api/v1/groups/:id/members`
 
 Invite a user to the group by email. The user must already have an account. This does
 **not** add them directly — it creates a pending `GroupJoinRequest` that the invited
@@ -334,7 +346,7 @@ If `RESEND_API_KEY` is configured, the invited user gets an email notifying them
 invite, fire-and-forget — it never delays or fails this response. Send failures are
 logged server-side only.
 
-### GET `/api/groups/:id/balances`
+### GET `/api/v1/groups/:id/balances`
 
 Compute net balances for all members in the group. Accounts for all expenses and settlements.
 
@@ -355,10 +367,10 @@ A positive `netCents` means the member is owed money. A negative value means the
 ## Join Requests
 
 A separate mechanism from the link-based [Invites](#invites) below: these are targeted
-at a specific user (by email, via `POST /api/groups/:id/members` above) and require
+at a specific user (by email, via `POST /api/v1/groups/:id/members` above) and require
 explicit acceptance.
 
-### GET `/api/groups/:id/join-requests`
+### GET `/api/v1/groups/:id/join-requests`
 
 List pending outgoing invites for a group (requires group membership). Used by the
 "Ausstehende Einladungen" section in the members panel.
@@ -376,7 +388,7 @@ List pending outgoing invites for a group (requires group membership). Used by t
 ]
 ```
 
-### GET `/api/join-requests`
+### GET `/api/v1/join-requests`
 
 List the current user's own pending incoming requests, across all groups.
 
@@ -394,7 +406,7 @@ List the current user's own pending incoming requests, across all groups.
 ]
 ```
 
-### POST `/api/join-requests/:id/accept`
+### POST `/api/v1/join-requests/:id/accept`
 
 Accept a pending request. Must be the invited user. If the user already became a
 member of the group in the meantime (e.g. via an invite link), this is a no-op success
@@ -407,7 +419,7 @@ that their invite was accepted, fire-and-forget — same non-blocking behavior a
 
 **Errors:** `403` not the invited user, `404` not found, `409` already responded to
 
-### POST `/api/join-requests/:id/decline`
+### POST `/api/v1/join-requests/:id/decline`
 
 Decline a pending request. Same ownership rules as accept. No membership is created.
 
@@ -419,7 +431,7 @@ Decline a pending request. Same ownership rules as accept. No membership is crea
 
 All expense endpoints require authentication and group membership.
 
-### GET `/api/groups/:groupId/expenses`
+### GET `/api/v1/groups/:groupId/expenses`
 
 List expenses in the group, ordered by date descending (ties broken by `id` descending for
 stable pagination). Supports offset-based pagination.
@@ -472,7 +484,7 @@ single-expense endpoint just below for the full `lineItems` shape.
 `total` is the count of all expenses in the group (regardless of `limit`/`offset`), used by
 the frontend to show the "X of Y" counter and determine whether to show a "Load more" button.
 
-### GET `/api/groups/:groupId/expenses/:expenseId`
+### GET `/api/v1/groups/:groupId/expenses/:expenseId`
 
 Fetch a single expense by ID. Used by the edit route to load the current expense data.
 
@@ -507,7 +519,7 @@ and divides the item price evenly across its assignees. This is the data the fro
 
 **Errors:** `403` not a member, `404` not found
 
-### POST `/api/groups/:groupId/expenses`
+### POST `/api/v1/groups/:groupId/expenses`
 
 Create an expense. Splits are auto-calculated based on `splitMode` and current member count.
 
@@ -538,7 +550,7 @@ If `markupRate` is provided (and `currency` differs from the group currency), th
 
 **Errors:** `503` exchange rate unavailable (both Frankfurter v2 and v1 unreachable, no cached rate)
 
-### PUT `/api/groups/:groupId/expenses/:expenseId`
+### PUT `/api/v1/groups/:groupId/expenses/:expenseId`
 
 Update an existing expense. Deletes old splits and recalculates. Same currency-conversion and markup logic as POST.
 
@@ -548,13 +560,13 @@ Update an existing expense. Deletes old splits and recalculates. Same currency-c
 
 **Errors:** `409` concurrent edit (updatedAt mismatch), `503` exchange rate unavailable (both APIs unreachable)
 
-### DELETE `/api/groups/:groupId/expenses/:expenseId`
+### DELETE `/api/v1/groups/:groupId/expenses/:expenseId`
 
 Delete an expense and its associated splits.
 
 **Response `204`:** No content
 
-### GET `/api/groups/:groupId/expenses/export`
+### GET `/api/v1/groups/:groupId/expenses/export`
 
 Export **every** expense in the group (not just the current page) as CSV, in the same
 wide, Splitwise-style format expense *import* (`POST .../expenses`, driven by
@@ -620,7 +632,7 @@ items are stored normalized rather than as JSON).
 
 All endpoints require authentication and group membership.
 
-### POST `/api/groups/:groupId/receipts/parse`
+### POST `/api/v1/groups/:groupId/receipts/parse`
 
 Upload a receipt image for OCR/structured extraction via Google Gemini. Returns `404`
 if `GEMINI_API_KEY` isn't configured (check `Group.receiptsEnabled` first to hide the
@@ -651,7 +663,7 @@ Gemini request and discarded once the response is written.
 **Errors (regular JSON, returned before streaming starts):** `400` no file or
 unsupported MIME type, `404` receipt parsing not enabled.
 
-### POST `/api/groups/:groupId/receipts`
+### POST `/api/v1/groups/:groupId/receipts`
 
 Create one expense from reviewed line items. Each line item computes its own
 per-assignee split server-side (never trusting client-computed sums) according to its
@@ -705,7 +717,7 @@ the plain expense endpoints.
 
 **Errors:** `422` an item's `exact`/`percent` values don't add up, an assignment references a non-group-member, or the total expense amount is ≤ 0
 
-### PUT `/api/groups/:groupId/receipts/:expenseId`
+### PUT `/api/v1/groups/:groupId/receipts/:expenseId`
 
 Replace an expense's line items and splits — used by the "Edit line items" flow.
 Delete-all + recreate semantics for both `ReceiptLineItem` and `ExpenseSplit` rows,
@@ -723,13 +735,13 @@ per-item validation as `POST`
 
 ## Settlements
 
-### GET `/api/groups/:id/settlements`
+### GET `/api/v1/groups/:id/settlements`
 
 List all recorded settlements for the group, ordered by date descending.
 
 **Response `200`:** Array of settlement objects (same shape as the POST response below)
 
-### GET `/api/groups/:id/settle-up?simplify=true`
+### GET `/api/v1/groups/:id/settle-up?simplify=true`
 
 Get suggested transfers to settle all debts. The `simplify` parameter (default `true`) enables the greedy min-cash-flow algorithm to reduce the number of transfers.
 
@@ -742,7 +754,7 @@ Get suggested transfers to settle all debts. The `simplify` parameter (default `
 ]
 ```
 
-### POST `/api/groups/:id/settlements`
+### POST `/api/v1/groups/:id/settlements`
 
 Record a payment between two members.
 
@@ -775,7 +787,7 @@ Record a payment between two members.
 }
 ```
 
-### PUT `/api/groups/:id/settlements/:settlementId`
+### PUT `/api/v1/groups/:id/settlements/:settlementId`
 
 Update an existing settlement (amount, date, note, or the two parties).
 
@@ -785,7 +797,7 @@ Update an existing settlement (amount, date, note, or the two parties).
 
 **Errors:** `404` settlement not found in this group
 
-### DELETE `/api/groups/:id/settlements/:settlementId`
+### DELETE `/api/v1/groups/:id/settlements/:settlementId`
 
 Delete a settlement.
 
@@ -797,7 +809,7 @@ Delete a settlement.
 
 ## Invites
 
-### POST `/api/groups/:id/invites`
+### POST `/api/v1/groups/:id/invites`
 
 Generate a shareable invite link. Requires group membership. Token expires after 7 days.
 
@@ -812,7 +824,7 @@ Generate a shareable invite link. Requires group membership. Token expires after
 
 The frontend constructs the full URL as `{origin}/invite/{token}`.
 
-### POST `/api/invites/:token/accept`
+### POST `/api/v1/invites/:token/accept`
 
 Accept an invite and join the group. Requires authentication (but not group membership).
 
@@ -834,7 +846,7 @@ Accept an invite and join the group. Requires authentication (but not group memb
 
 ## Activities
 
-### GET `/api/activities`
+### GET `/api/v1/activities`
 
 List activity events across **all** groups the authenticated user is a member of,
 newest first — powers the dashboard's global activity feed. Requires authentication
@@ -842,7 +854,7 @@ only (no group membership check needed, since it's scoped to the caller's own
 memberships). Supports the same offset-based pagination as the per-group endpoint
 below.
 
-**Query parameters:** Same as `/api/groups/:groupId/activities` below.
+**Query parameters:** Same as `/api/v1/groups/:groupId/activities` below.
 
 **Response `200`:**
 
@@ -866,7 +878,7 @@ below.
 Note the extra `groupName` field (absent from the per-group endpoint below, since there
 it's implied by the URL).
 
-### GET `/api/groups/:groupId/activities`
+### GET `/api/v1/groups/:groupId/activities`
 
 Requires authentication and group membership.
 
@@ -933,7 +945,7 @@ Validation errors (Zod) include field-level details:
 | `500`  | Internal server error                                                            |
 | `503`  | Exchange rate unavailable (Frankfurter API unreachable, no cached rate in DB); Gemini unreachable after retries + fallback |
 
-`POST /api/groups/:groupId/receipts/parse` is the one exception to this table: once
+`POST /api/v1/groups/:groupId/receipts/parse` is the one exception to this table: once
 streaming has started the HTTP status is always `200`, and errors are instead
 delivered as a `{"type":"error", "status", "message"}` line in the NDJSON body — see
 the [Receipts](#receipts) section above.

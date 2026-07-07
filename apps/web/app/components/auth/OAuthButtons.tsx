@@ -68,7 +68,7 @@ export function OAuthButtons({ showPasskey = false, onPasskeySuccess }: OAuthBut
   const handleGoogle = () => {
     setError(null);
     setLoading('google');
-    window.location.href = `${BASE_URL}/api/auth/google`;
+    window.location.href = `${BASE_URL}/api/v1/auth/google`;
   };
 
   const handlePasskey = async () => {

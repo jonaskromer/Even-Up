@@ -14,13 +14,13 @@ const FAKE_USER = {
  * the browser manages — there is no client-side token to inject. Instead we
  * intercept the two network calls that establish auth state:
  *
- *  1. GET /api/auth/me  — called by AuthContext on mount; we return a fake user.
- *  2. GET /api/auth/**  — intercept any other auth checks (logout, etc.) to no-op.
+ *  1. GET /api/v1/auth/me  — called by AuthContext on mount; we return a fake user.
+ *  2. GET /api/v1/auth/**  — intercept any other auth checks (logout, etc.) to no-op.
  *
  * No Storage patching needed.
  */
 export async function mockAuthedUser(page: Page): Promise<void> {
-  await page.route('**/api/auth/me', (route) =>
+  await page.route('**/api/v1/auth/me', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
