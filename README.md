@@ -2,6 +2,12 @@
 
 A web application for splitting expenses fairly among groups. Create groups for your flatshare, trips, or events, log shared expenses, and let Even-Up calculate who owes whom — with optional debt simplification to minimize the number of transfers.
 
+**Live app:** [even-up.dev](https://even-up.dev) — sign in with the demo account below, or register your own.
+
+| Email               | Password | Group                          |
+| ------------------- | -------- | ------------------------------- |
+| `demo@even-up.local` | `demo`   | Ski Trip 2026 (with anna, ben)  |
+
 ---
 
 ## Core Features
@@ -134,263 +140,10 @@ A web application for splitting expenses fairly among groups. Create groups for 
   Supabase Cloud: auth.users (credentials,
   sessions) separate from this database
 ```
-
-### Why SPA over SSR?
-
-Even-Up is a fully authenticated, interactive application. Every view depends on the logged-in user's data. Server-side rendering adds complexity without SEO benefit here. A client-side SPA with Supabase Auth and Fastify as a dedicated API layer is the simplest architecture that fits the problem. See [ADR 001](docs/adr/001-spa-mode.md) for full rationale.
-
-### Shared Validation
-
-Zod schemas live in a shared `packages/shared` workspace. Both the React Router loaders (client-side) and Fastify route handlers (server-side) import the same schemas — a single source of truth for what constitutes a valid expense, group, or settlement.
-
 ---
-
-## Data Model
-
-All monetary values are stored as **integer cents** to avoid floating-point rounding errors.
-
-| Entity               | Key Fields                                                                   |
-| -------------------- | ---------------------------------------------------------------------------- |
-| **User**             | id (Supabase Auth user id), name, email, preferredCurrency, defaultMarkupRate, createdAt |
-| **Group**            | id, name, currency (base currency), createdAt, updatedAt                     |
-| **GroupMember**      | groupId, userId, role                                                        |
-| **Expense**          | id, groupId, paidByUserId, description, amountCents (converted to group currency), originalAmountCents, originalCurrency, appliedMarkupRate, splitMode, date, receiptStoreName? |
-| **ExpenseSplit**     | expenseId, userId, owedCents                                                 |
-| **Settlement**       | id, groupId, fromUserId, toUserId, amountCents, date, note?                  |
-| **GroupInvite**      | id, token (unique), groupId, createdBy, expiresAt                            |
-| **Activity**         | id, groupId, userId, type, data (JSON), createdAt                            |
-| **GroupJoinRequest** | id, groupId, invitedUserId, invitedByUserId, status, createdAt, respondedAt? |
-| **ExchangeRate**     | id, date, fromCurrency, toCurrency, rate (unique on date+from+to — permanent cache) |
-| **ReceiptLineItem**  | id, expenseId, name, quantity, priceCents, sortOrder, excluded, splitMode (equal/exact/percent/shares) |
-| **ReceiptLineItemAssignment** | lineItemId, userId, shareWeight, exactCents?, percent? (only the field matching the item's splitMode is used) |
-
-Credentials and password-reset tokens live entirely in Supabase Auth's own `auth.users`
-table (managed by Supabase, separate from this database) — there is no `passwordHash`
-or password-reset-token table in this app's schema.
-
-### CSV Export Row Schema
-
-`GET /api/v1/groups/:id/expenses/export` (see [API Endpoints](#expenses)) exports in the
-same wide, Splitwise-style format expense **import** already reads (see
-[UI & Quality of Life](#ui--quality-of-life)) — `Date,Description,Cost,` followed by
-one column per group member — so a group's data round-trips between the two. Each
-logical row is validated server-side against `expenseExportRowSchema` in
-`packages/shared/src/schemas/expenseExport.ts` before being flattened into CSV
-columns:
-
-| Field           | Type              | Notes                                                                 |
-| --------------- | ----------------- | ---------------------------------------------------------------------- |
-| `date`          | `string`          | `YYYY-MM-DD`                                                            |
-| `description`   | `string`          |                                                                          |
-| `amountCents`   | `number` (int)    | Total expense amount — becomes the `Cost` column                       |
-| `memberNetCents`| `Record<email, number>` | One entry per group member, keyed by **email** (see below); values sum to zero across a row |
-
-Each member's net value is positive if they're owed money on that expense (they paid
-more than their own share) and negative if they owe money — exactly Splitwise's
-per-expense net-balance convention, and exactly what expense import already parses
-back out via `payerNetCents`/`owedCents` in `ImportExpensesButton.tsx`.
-
-**Members are identified by email — not by id/uuid, and not by display name.** An
-internal id has no place in a human-edited CSV, and two different people can share a
-display name (a real ambiguity the old name-matching import logic had to guess
-around); email is unique and stable. Both the export column headers and the import
-column-matching logic (`matchMember()` in `ImportExpensesButton.tsx`) now agree on
-this, whereas previously import matched on a fuzzy name comparison. Group membership
-is fixed once added (there is no "remove member" feature), so current membership
-always covers every historical expense's participants.
-
-`ReceiptLineItem`/`ReceiptLineItemAssignment` are deliberately excluded — a
-receipt-created expense exports identically to a manually-entered one, using only its
-final `Expense`/`ExpenseSplit` rows, never the per-item breakdown that produced them.
-
----
-
-## API Endpoints
-
-### Auth
-
-All auth is handled by the Fastify BFF — the browser only ever holds `HttpOnly`
-session cookies, never a token in JavaScript. See [ADR 005](docs/adr/005-bff-session-management.md)
-and [docs/api-reference.md](docs/api-reference.md#authentication) for full request/response
-details of every endpoint below.
-
-| Method | Path                          | Description                                       |
-| ------ | ----------------------------- | -------------------------------------------------- |
-| POST   | `/api/v1/auth/register`          | Create account, sets session cookies                |
-| POST   | `/api/v1/auth/login`              | Email/password login                                |
-| POST   | `/api/v1/auth/logout`             | Clear session cookies                               |
-| POST   | `/api/v1/auth/refresh`            | Refresh the access token using the refresh cookie   |
-| GET    | `/api/v1/auth/google`             | Start server-side PKCE Google OAuth flow            |
-| GET    | `/api/v1/auth/callback`           | Google OAuth callback, sets session cookies         |
-| POST   | `/api/v1/auth/exchange`           | Exchange a client-side token pair (passkeys) for cookies |
-| POST   | `/api/v1/auth/forgot-password`    | Send a Supabase password-reset email                |
-| GET    | `/api/v1/auth/session-tokens`     | Expose current cookie tokens (WebAuthn enrollment only) |
-| GET    | `/api/v1/auth/me`                 | Current user profile (includes `defaultMarkupRate`) |
-| PATCH  | `/api/v1/auth/me`                 | Update name, language, preferred currency, or `defaultMarkupRate` |
-| POST   | `/api/v1/auth/change-password`    | Change password via the current session             |
-| DELETE | `/api/v1/auth/me`                 | Delete account (`409` if shared financial records exist) |
-
-### Groups
-
-| Method | Path                       | Description                                             |
-| ------ | -------------------------- | ------------------------------------------------------- |
-| GET    | `/api/v1/groups`              | List user's groups                                      |
-| POST   | `/api/v1/groups`              | Create group                                            |
-| GET    | `/api/v1/groups/:id`          | Group detail                                            |
-| POST   | `/api/v1/groups/:id/members`  | Invite member by email (creates a pending join request) |
-| GET    | `/api/v1/groups/:id/balances` | Net balances per member                                 |
-
-### Expenses
-
-| Method | Path                            | Description                |
-| ------ | ------------------------------- | -------------------------- |
-| GET    | `/api/v1/groups/:id/expenses`      | List expenses (paginated, `?limit=20&offset=0`) |
-| POST   | `/api/v1/groups/:id/expenses`      | Create expense with splits (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
-| GET    | `/api/v1/groups/:id/expenses/:eid` | Single expense (used by edit route) — includes `lineItems`/`receiptStoreName` for receipt-created expenses |
-| PUT    | `/api/v1/groups/:id/expenses/:eid` | Update expense (optional `currency` + `markupRate` fields trigger FX conversion with markup) |
-| DELETE | `/api/v1/groups/:id/expenses/:eid` | Delete expense             |
-| GET    | `/api/v1/groups/:id/expenses/export` | Export every expense + its splits as CSV (one row per expense/member pair, no line items) — see [Data Model](#data-model) for the row schema and `docs/api-reference.md` for the full column reference |
-
-### Settlements
-
-| Method | Path                                         | Description              |
-| ------ | --------------------------------------------- | ------------------------- |
-| GET    | `/api/v1/groups/:id/settlements`                | List recorded settlements |
-| POST   | `/api/v1/groups/:id/settlements`                | Record a settlement       |
-| PUT    | `/api/v1/groups/:id/settlements/:settlementId`  | Update a settlement       |
-| DELETE | `/api/v1/groups/:id/settlements/:settlementId`  | Delete a settlement       |
-| GET    | `/api/v1/groups/:id/settle-up?simplify=true`    | Suggested transfers       |
-
-### Receipts (AI-assisted expense creation)
-
-| Method | Path                                    | Description                                                                                             |
-| ------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/v1/groups/:id/receipts/parse`        | Upload a receipt image; streams retry/fallback progress, then the extracted store/line items (NDJSON)    |
-| POST   | `/api/v1/groups/:id/receipts`              | Create one expense from reviewed line items + per-item splits                                             |
-| PUT    | `/api/v1/groups/:id/receipts/:expenseId`   | Replace an expense's line items + splits                                                                  |
-
-### Invites
-
-| Method | Path                         | Description                         |
-| ------ | ---------------------------- | ----------------------------------- |
-| POST   | `/api/v1/groups/:id/invites`    | Generate invite link (7-day expiry) |
-| POST   | `/api/v1/invites/:token/accept` | Accept invite and join group        |
-
-### Activities
-
-| Method | Path                         | Description                         |
-| ------ | ---------------------------- | ----------------------------------- |
-| GET    | `/api/v1/activities`            | Activity events across all of the user's groups (paginated, powers the dashboard's global feed) |
-| GET    | `/api/v1/groups/:id/activities` | Activity events for a group (paginated, `?limit=20&offset=0`) |
-
-### Join Requests
-
-| Method | Path                             | Description                              |
-| ------ | -------------------------------- | ---------------------------------------- |
-| GET    | `/api/v1/groups/:id/join-requests`  | Pending outgoing invites for a group     |
-| GET    | `/api/v1/join-requests`             | Current user's pending incoming requests |
-| POST   | `/api/v1/join-requests/:id/accept`  | Accept a request and join the group      |
-| POST   | `/api/v1/join-requests/:id/decline` | Decline a request                        |
-
----
-
-## Project Structure
-
-```
-/
-├── apps/
-│   ├── web/                    # React Router v8 SPA
-│   │   ├── app/
-│   │   │   ├── routes/         # File-based routes with clientLoaders
-│   │   │   │   ├── _index.tsx           # / (dashboard)
-│   │   │   │   ├── login.tsx            # /login
-│   │   │   │   ├── register.tsx         # /register
-│   │   │   │   ├── forgot-password.tsx  # /forgot-password
-│   │   │   │   ├── reset-password.tsx   # /reset-password?token=…
-│   │   │   │   ├── auth.callback.tsx    # /auth/callback (Google OAuth landing)
-│   │   │   │   ├── settings.tsx         # /settings (profile, currency, markup, password, account deletion)
-│   │   │   │   ├── groups.new.tsx       # /groups/new
-│   │   │   │   ├── groups.$groupId.tsx  # /groups/:id
-│   │   │   │   ├── groups.$groupId_.new-expense.tsx
-│   │   │   │   ├── groups.$groupId_.expenses.$expenseId.edit.tsx
-│   │   │   │   ├── groups.$groupId_.receipt.tsx  # upload → processing → review → confirm
-│   │   │   │   └── invite.$token.tsx    # /invite/:token
-│   │   │   ├── components/
-│   │   │   │   ├── ui/         # shadcn/ui (Button, Card, Input, Label, Alert)
-│   │   │   │   ├── dashboard/  # BalanceBanner, GroupList, GroupCard, GlobalActivityFeed
-│   │   │   │   ├── group/      # GroupDetail, ExpenseFeed, BalancesPanel, MembersPanel,
-│   │   │   │   │               # SettleUpPanel, InviteLinkButton, ActivityLog,
-│   │   │   │   │               # ImportExpensesButton, ExportExpensesButton
-│   │   │   │   ├── expense/    # AddExpenseForm, SplitModeToggle
-│   │   │   │   ├── receipt/    # ReceiptUploadStep, ReceiptProcessingStep,
-│   │   │   │   │               # ReceiptLineItemReview (per-item equal/exact/percent/shares)
-│   │   │   │   ├── feedback/   # LoadingState, ErrorState
-│   │   │   │   └── layout/     # SiteHeader (with ThemeToggle), SiteFooter,
-│   │   │   │                   # PendingInvitationsBell
-│   │   │   ├── context/        # AuthContext (Supabase session-backed login,
-│   │   │   │                   # register, logout), PendingInvitesContext
-│   │   │   │                   # (incoming join requests)
-│   │   │   ├── lib/            # apiClient (incl. postFileStream for NDJSON uploads and
-│   │   │   │                   # downloadFile for the CSV export), computeBalances,
-│   │   │   │                   # receiptSplits, requireAuth, supabaseClient, utils
-│   │   │   ├── root.tsx        # Root layout + AuthProvider + PendingInvitesProvider
-│   │   │   ├── routes.ts       # File-based route config (@react-router/fs-routes)
-│   │   │   └── styles.css      # Tailwind + shadcn CSS variables + domain styles
-│   │   ├── tailwind.config.js
-│   │   ├── vite.config.ts
-│   │   └── react-router.config.ts  # ssr: false
-│   ├── api/                    # Fastify REST API
-│   │   ├── src/
-│   │   │   ├── routes/         # auth, groups, expenses (incl. GET /export), settlements,
-│   │   │   │                   # invites, activities, joinRequests,
-│   │   │   │                   # receipts (Gemini OCR + line-item expenses)
-│   │   │   ├── middleware/     # requireAuth (verifies Supabase JWT, upserts User),
-│   │   │   │                   # requireGroupMember, errorHandler
-│   │   │   ├── services/       # balanceService, debtSimplificationService, authService
-│   │   │   │                   # (Supabase JWT verification via jose), activityService,
-│   │   │   │                   # emailService, exchangeRateService (Frankfurter + DB cache),
-│   │   │   │                   # geminiReceiptService (Gemini OCR, retry + model fallback)
-│   │   │   ├── generated/     # Prisma 7 generated client
-│   │   │   ├── app.ts         # Fastify app factory (buildApp)
-│   │   │   └── server.ts      # Entry point (listen)
-│   │   ├── prisma/
-│   │   │   ├── schema.prisma  # 12 models (User, Group, GroupMember, Expense, ExpenseSplit,
-│   │   │   │                  #            Settlement, GroupInvite, Activity, GroupJoinRequest,
-│   │   │   │                  #            ExchangeRate, ReceiptLineItem,
-│   │   │   │                  #            ReceiptLineItemAssignment)
-│   │   │   └── seed.ts
-│   │   └── prisma.config.ts   # Prisma 7 config (datasource URL for migrations)
-│   ├── web-static/             # M1 HTML/CSS prototype (archive)
-│   └── e2e/                    # Playwright E2E tests (auth, dashboard) — mocked GET /api/v1/auth/me
-├── packages/
-│   └── shared/                 # Zod schemas (group, expense, settlement, receipt,
-│                                # expenseExport)
-├── docs/
-│   ├── milestones.md           # Criterion-to-code mapping for grading
-│   ├── architecture.md         # System, frontend & API architecture diagrams
-│   ├── api-reference.md        # Full REST API documentation with examples
-│   └── adr/
-│       ├── 001-spa-mode.md        # SPA vs SSR decision record
-│       ├── 002-debt-simplification.md  # Min-cash-flow algorithm rationale
-│       ├── 003-prisma-driver-adapter.md # Prisma 5 → 7 migration
-│       ├── 004-supabase-auth.md   # Custom JWT → Supabase Auth (Cloud) migration
-│       ├── 005-009-…              # BFF session, server-side splits, RR v8, CSP, pagination
-│       ├── 010-multi-currency.md  # Per-expense currency, Frankfurter API, DB rate cache
-│       ├── 011-credit-card-fx-markup.md # Per-user/per-expense credit card FX markup
-│       └── 012-receipt-ai-parsing.md    # Gemini receipt OCR, line-item split modes
-├── docker-compose.yml          # PostgreSQL 16 (development)
-├── docker-compose.prod.yml     # Production (Caddy + frontend + API + Postgres)
-├── Caddyfile                   # Reverse proxy + automatic HTTPS (Let's Encrypt or local CA)
-├── Makefile                    # Local dev (make dev) + remote-deployment workflow (deploy, logs, ps, ...)
-└── .github/
-    └── workflows/ci.yml        # Lint, typecheck, test-api, test-web, docker-build
-```
-
----
-
 ## Getting Started
 
-### Option A — Reproducibly startable via Docker Compose (recommended for grading)
+### Option A — Reproducibly startable via Docker Compose
 
 Single prerequisite: Docker.
 
@@ -407,7 +160,7 @@ redirects to HTTPS using a local self-signed cert when no real domain is configu
 - Caddy is the only public entrypoint; nginx (internal) proxies `/api/*` to the API
   container, so there is no CORS configuration and no separate API URL to set.
 - With `DOMAIN` left at its default (`localhost`), Caddy serves over HTTPS with a
-  locally-trusted cert — fine for grading. Set `DOMAIN=your-domain.com` (pointed at the
+  locally-trusted cert. Set `DOMAIN=your-domain.com` (pointed at the
   server) to get a real, free Let's Encrypt certificate automatically — no extra config.
 - The seed is idempotent — restarting the `api` container will not duplicate demo data.
 - Stop with `docker compose -f docker-compose.prod.yml down` (add `-v` to also wipe the database).
@@ -443,11 +196,7 @@ cd apps/web
 npm run dev                     # Vite on http://localhost:5173
 ```
 
-### Demo Account
-
-| Email               | Password            | Group                                |
-| ------------------- |---------------------|--------------------------------------|
-| `demo@even-up.local` | demo                | Ski Trip 2026 (with anna, ben) |
+The seed creates the demo account listed at the top of this README (`demo@even-up.local` / `demo`).
 
 ### Running Tests
 
@@ -565,10 +314,6 @@ The API uses Fastify's built-in logger (pino), enabled in development and produc
 docker compose -f docker-compose.prod.yml logs -f api
 ```
 
-### Health Check
-
-`GET /api/health` returns `{ "status": "ok" }`, no authentication required — deliberately unversioned since it's infra-facing, not part of the `/api/v1/*` client API contract. Used by the Docker Compose healthcheck for the `api` service; also suitable for external uptime monitoring.
-
 ### CI Pipeline
 
 Seven jobs run on every push/PR to `main` or `dev` (`.github/workflows/ci.yml`): a
@@ -581,168 +326,12 @@ for the full pipeline diagram.
 
 ---
 
-## Roadmap
-
-### M1 — Static Prototype
-
-Semantic HTML/CSS prototype without JavaScript.
-
-- [x] Semantic HTML structure (`header`, `nav`, `main`, `section`, `article`, `footer`)
-- [x] Group overview page
-- [x] Group detail page (expense list + balances)
-- [x] Add expense form with `<label for>` + `name` attributes
-- [x] Responsive layout using Flexbox and Grid
-- [x] Consistent design tokens (CSS custom properties for colors, typography)
-- [x] Mobile-first media query (<=768px breakpoint)
-- [x] Clean URL structure documented
-
-### M2 — React SPA with Interaction
-
-Port M1 to React + TypeScript with Vite.
-
-- [x] Vite + React + TypeScript project setup (`strict: true`)
-- [x] Component decomposition (layout, dashboard, group, expense, feedback)
-- [x] Typed props for data and configuration
-- [x] Controlled forms with `useState` (5 form fields)
-- [x] `useState` for application data shell (groups, expenses, loading, error)
-- [x] `useEffect` for initial data loading
-- [x] Split mode switching (equal / exact / percent / shares)
-- [x] End-to-end user action: create expense -> list updates -> balances recalculate
-- [x] M1 design system ported to React
-
-### M3 — Routing & Data Fetching
-
-React Router with multiple routes and HTTP data fetching.
-
-- [x] React Router setup with >=3 routes (`/`, `/groups/:id`, `/groups/:id/new-expense`)
-- [x] Navigation via `<Link>` (no `window.location`)
-- [x] `useParams` and `useNavigate` for typed route params and programmatic navigation
-- [x] Centralized API client with error class and JWT header injection
-- [x] GET requests for groups and expenses
-- [x] POST request to create expenses
-- [x] DELETE request to remove expenses
-- [x] Loading state with `role="status"` accessibility
-- [x] Error state with retry button (4xx/5xx + network errors)
-- [x] Inline form submit error handling
-- [x] Shared application state via React Context (`AppDataProvider`)
-- [x] Three route consumers sharing the same data context
-- [x] Mock backend via json-server for development
-
-### M4 — Backend, Auth & Testing
-
-Fastify REST API with PostgreSQL, auth, and test coverage.
-
-- [x] Fastify REST API with cors, compression, JSON parsing
-- [x] Auth routes (register, login, me)
-- [x] JWT auth service (hash, compare, sign, verify)
-- [x] Auth middleware (Bearer token -> `req.user`)
-- [x] Group membership middleware (403 on non-members)
-- [x] Group CRUD endpoints
-- [x] Expense CRUD endpoints with automatic split calculation
-- [x] Zod input validation on all mutation endpoints
-- [x] Centralized error handler (ZodError, HttpError, Prisma errors -> JSON)
-- [x] Prisma schema with 6 models (User, Group, GroupMember, Expense, ExpenseSplit, Settlement)
-- [x] Database seed with demo data
-- [x] Server-side balance computation (integer cents, includes settlements)
-- [x] Frontend AuthContext (login, register, logout, token persistence)
-- [x] Protected routes with redirect to `/login`
-- [x] Login and register pages with error display
-- [x] API client wired to real backend with JWT
-- [x] Provider hierarchy (StrictMode -> Router -> Auth -> App)
-- [x] Settlement endpoints (record payment, suggest transfers)
-- [x] Debt simplification service (greedy min-cash-flow algorithm)
-- [x] Test: balance computation (net sum = 0, payer credited, rounding)
-- [x] Test: auth guard (register -> JWT, wrong password -> 401, no token -> 401, valid -> 200)
-- [x] Test: expenses API (no auth -> 401, member POST -> 201)
-- [x] Test: frontend components (LoadingState, ErrorState)
-- [x] Test: debt simplification (fewer transfers, same net balances)
-- [x] Test: settlements API (record settlement, settle-up suggestions, balance impact)
-
-### M5 — Deployment & Polish
-
-Production deployment, architecture migration, and UI polish.
-
-- [x] Docker Compose production setup (API + frontend + Postgres)
-- [x] Migrate to React Router v7 file-based routing with clientLoaders (SPA mode — see [ADR 001](docs/adr/001-spa-mode.md))
-- [x] Replace custom CSS components with Tailwind CSS + shadcn/ui (Button, Card, Input, Label, Alert)
-- [x] Shared Zod schemas in `packages/shared` (group, expense, settlement)
-- [x] ESLint + Prettier pre-commit hooks via Husky + lint-staged
-- [x] GitHub Actions CI pipeline (lint, typecheck, test-api, test-web, docker-build smoke test)
-- [x] Performance: gzip compression, asset cache headers, route-level code splitting
-- [x] Create group UI (`/groups/new`)
-- [x] Add members to group (by email, on group detail page)
-- [x] Empty state on dashboard with CTA to create first group
-- [x] `useRevalidator` for live data refresh after member addition
-- [x] Delete expense UI (hover button per expense item with confirmation)
-- [x] Settlements UI (settle-up flow with debt simplification toggle)
-- [x] Expense edit flow (update existing expense)
-- [x] Stretch: group invite links (shareable join URL with 7-day expiry)
-- [x] Stretch: dark mode (system preference + manual toggle, persisted)
-- [x] Stretch: CSV expense import (bulk entry with member-email matching and preview)
-- [x] Stretch: activity log per group (relative timestamps, load-more paginated)
-- [x] Stretch: password reset — now handled by Supabase Auth's own
-      `resetPasswordForEmail`/`updateUser` flow (see [ADR 004](docs/adr/004-supabase-auth.md)),
-      superseding the original custom token-based flow
-- [x] Stretch: group join requests — adding a member by email creates a pending request
-      that must be accepted, not an immediate add; header notification bell across all
-      pages for incoming requests, with a per-group view of outstanding outgoing invites
-- [x] Stretch: signup-confirmation email — now sent by Supabase Auth itself (SMTP-routed
-      through the app's Resend account, branded template), superseding the original
-      app-side welcome email — see [ADR 004](docs/adr/004-supabase-auth.md)
-- [x] Stretch: automatic HTTPS via Caddy reverse proxy (local self-signed cert for
-      `DOMAIN=localhost`, real Let's Encrypt certificate for a configured domain)
-- [x] Stretch: `make dev` — one-command local dev environment (db + migrate + seed +
-      both dev servers, hot reload)
-
-### M6 — Auth Migration: Custom JWT → Supabase Auth
-
-Replaced the M4 custom JWT auth system with Supabase Auth (Cloud), keeping the
-self-hosted Postgres + Prisma database for all application data. See
-[ADR 004](docs/adr/004-supabase-auth.md) for full rationale.
-
-- [x] Frontend talks to Supabase directly (`@supabase/supabase-js`) for sign-up, login,
-      logout, and password reset
-- [x] API verifies the Supabase-issued JWT per request (`jose`, JWKS or HS256) instead
-      of its own signed tokens
-- [x] Lazy `User` provisioning via `prisma.user.upsert()` on first authenticated
-      request — no signup webhook needed
-- [x] `passwordHash` column and `PasswordResetToken` table dropped; `User.id` is now the
-      Supabase Auth UUID
-- [x] `/api/v1/auth/register`, `/login`, `/forgot-password`, `/reset-password` removed
-      (kept `/me`); app-side `sendWelcomeEmail`/`sendPasswordResetEmail` removed
-- [x] Supabase's confirmation/reset emails routed through the existing Resend account
-      (custom SMTP) with branded templates — exactly one signup email, not two
-- [x] Test suite rewritten to mock JWT verification instead of minting real tokens
-- [x] Stretch: multi-currency support — per-expense currency selection (31 ECB currencies),
-      historical exchange rates via Frankfurter API, permanent DB cache, original amount
-      preserved for display, per-currency balance breakdown toggle; see [ADR 010](docs/adr/010-multi-currency.md)
-- [x] Stretch: credit card FX markup — per-user default + per-expense override percentage
-      applied on top of the exchange-rate conversion; see [ADR 011](docs/adr/011-credit-card-fx-markup.md)
-- [x] Stretch: BFF session management — session moved from `supabase-js`/`localStorage` to
-      HttpOnly cookies owned entirely by the Fastify API, closing an XSS token-theft vector;
-      see [ADR 005](docs/adr/005-bff-session-management.md)
-- [x] Stretch: Google sign-in (server-side PKCE OAuth) and passkey (WebAuthn) login/registration
-- [x] Stretch: change password and delete-account self-service in Settings
-- [x] Stretch: AI-assisted receipt scanning — Gemini extracts store name/date/line items
-      from a photo; review screen assigns items to members with per-item equal/exact/
-      percent/shares splits, excludable items, live per-member totals, and a re-editable
-      "Edit line items" flow on the resulting expense; see [ADR 012](docs/adr/012-receipt-ai-parsing.md)
-- [x] Stretch: CSV export — every expense's `Expense`/`ExpenseSplit` data (no receipt
-      line items), in the same wide, email-keyed format CSV import already reads, so a
-      group's data round-trips between the two
-- [ ] Stretch: recurring expenses (rent, subscriptions)
-- [ ] Stretch: charts and spending statistics per group
-
----
-
 ## Documentation
 
 | Document                                                                 | Description                                                                                                                                   |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Architecture](docs/architecture.md)                                     | System overview, frontend component hierarchy, auth flow, data flow, security model, testing strategy                                         |
 | [API Reference](docs/api-reference.md)                                   | Full REST API documentation with request/response examples for every endpoint                                                                 |
-| [Milestones](.ai/grading/milestones.md)                                         | Criterion-to-code mapping for each milestone (grading reference)                                                                              |
-| [Ausarbeitung](.ai/grading/ausarbeitung.md)                                     | Full written report (Einleitung, Architektur, Umsetzung pro Meilenstein, Deployment, Reflexion); `docs/ausarbeitung.pdf` is the generated PDF |
 | [ADR 001 — SPA Mode](docs/adr/001-spa-mode.md)                                         | Why SPA over SSR for a fully authenticated app                                                                |
 | [ADR 002 — Debt Simplification](docs/adr/002-debt-simplification.md)                   | Greedy min-cash-flow algorithm: rationale, pseudocode, complexity analysis                                    |
 | [ADR 003 — Prisma Driver Adapter](docs/adr/003-prisma-driver-adapter.md)               | Prisma 5 → 7 migration: driver adapter, generated client, config changes                                      |
