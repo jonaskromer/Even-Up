@@ -1,4 +1,6 @@
-# Even-Up
+<p align="center">
+  <img src="docs/readme-banner.svg" alt="Even-Up — Split shared expenses fairly" width="100%">
+</p>
 
 A web application for splitting expenses fairly among groups. Create groups for your flatshare, trips, or events, log shared expenses, and let Even-Up calculate who owes whom — with optional debt simplification to minimize the number of transfers.
 
@@ -7,6 +9,19 @@ A web application for splitting expenses fairly among groups. Create groups for 
 | Email               | Password | Group                          |
 | ------------------- | -------- | ------------------------------- |
 | `demo@even-up.local` | `demo`   | Ski Trip 2026 (with anna, ben)  |
+
+---
+
+## Table of Contents
+
+- [Core Features](#core-features)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Operations](#operations)
+- [Documentation](#documentation)
+- [Known Limitations](#known-limitations)
+- [License](#license)
 
 ---
 
@@ -143,12 +158,17 @@ A web application for splitting expenses fairly among groups. Create groups for 
 ---
 ## Getting Started
 
+### Prerequisites
+
+- **A Supabase Cloud project** (free tier) — required regardless of which option you pick. Sign up at [supabase.com](https://supabase.com), create a project, and grab the URL + anon/publishable key from **Settings → API**. Without this, registration/login won't work at all — the app has no fallback local auth. See [ADR 004](docs/adr/004-supabase-auth.md) for why.
+- **Docker** 
+
+`RESEND_API_KEY` and `GEMINI_API_KEY` are **not** prerequisites — both are optional and the app degrades gracefully without them (no transactional emails / no receipt-scanning UI, respectively). See [Transactional Emails](#transactional-emails) and [Receipt Scanning (Gemini)](#receipt-scanning-gemini) below.
+
 ### Option A — Reproducibly startable via Docker Compose
 
-Single prerequisite: Docker.
-
 ```bash
-cp .env.example .env             # set SUPABASE_URL/VITE_SUPABASE_* and POSTGRES_PASSWORD
+cp .env.example .env             # set SUPABASE_URL/VITE_SUPABASE_* from your Supabase project, and POSTGRES_PASSWORD
 docker compose -f docker-compose.prod.yml up --build
 ```
 
@@ -167,11 +187,15 @@ redirects to HTTPS using a local self-signed cert when no real domain is configu
 
 ### Option B — Local development (hot reload)
 
-**Prerequisites:** Node.js >= 22, Docker (for PostgreSQL only).
+**Additional prerequisite beyond the list above:** Node.js >= 22 (Docker is only used for PostgreSQL in this option — ports 80/443 aren't needed since there's no Caddy).
 
 **Shortcut:** `npm install`, then `make dev` — starts the database, applies migrations,
 seeds demo data, and runs both the API and frontend dev servers in one terminal with
 hot reload. `Ctrl+C` stops both. See [Operations → Makefile](#makefile) for details.
+Note that `make dev-setup` will happily create `apps/api/.env` from the placeholder
+template if it doesn't already exist — set your real Supabase values in it *before*
+running `make dev` the first time, or login/register will fail against the placeholder
+project URL.
 
 Equivalent manual steps, if you'd rather run each piece yourself (e.g. in separate
 terminals or your IDE's run configs):
@@ -185,7 +209,7 @@ npm install
 
 # 3. Set up the API
 cd apps/api
-cp ../../.env.example .env      # adjust values as needed
+cp ../../.env.example .env      # set SUPABASE_URL/SUPABASE_ANON_KEY from your Supabase project
 npx prisma generate             # generate the Prisma client
 npx prisma migrate dev          # run migrations
 npx prisma db seed              # seed demo data
